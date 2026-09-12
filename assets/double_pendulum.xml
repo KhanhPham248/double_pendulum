@@ -1,0 +1,50 @@
+<mujoco model="double_pendulum_base_motor">
+  <!-- q1=0: link1 down. q2=0: links collinear. Target: q1=pi, q2=0. -->
+  <compiler angle="radian"/>
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast"/>
+  <statistic center="0 0 -0.35" extent="1.6"/>
+
+  <visual>
+    <global offwidth="1280" offheight="720"/>
+    <rgba haze="0.15 0.15 0.18 1"/>
+  </visual>
+
+  <default>
+    <geom type="capsule" size="0.025" contype="0" conaffinity="0"/>
+  </default>
+
+  <worldbody>
+    <light name="key" pos="1 -1 2" directional="true"/>
+    <camera name="overview" pos="1.7 -2.0 0.8" xyaxes="0.76 0.65 0 -0.24 0.28 0.93"/>
+
+    <!-- Fixed stand is decorative and has no contacts. -->
+    <body name="stand" pos="0 0.15 0">
+      <geom name="foot" type="box" size="0.32 0.24 0.04" pos="0 0 -1.12" rgba="0.25 0.28 0.32 1"/>
+      <geom name="post" fromto="0 0 -1.08 0 0 0" size="0.04" rgba="0.4 0.43 0.48 1"/>
+      <geom name="motor_housing" type="box" size="0.075 0.055 0.075" pos="0 -0.03 0" rgba="0.2 0.22 0.25 1"/>
+      <geom name="shaft" fromto="0 -0.04 0 0 -0.15 0" size="0.018" rgba="0.75 0.75 0.8 1"/>
+    </body>
+    <body name="link1">
+      <joint name="base_joint" type="hinge" axis="0 1 0" limited="false" damping="0.025" armature="0.002"/>
+      <site name="base_pivot" type="sphere" size="0.035" rgba="0.85 0.85 0.9 1"/>
+      <geom name="link1_geom" fromto="0 0 0 0 0 -0.5" mass="0.5" rgba="0.15 0.55 0.95 1"/>
+
+      <body name="link2" pos="0 0 -0.5">
+        <!-- Passive elbow: no actuator is attached to elbow_joint. -->
+        <joint name="elbow_joint" type="hinge" axis="0 1 0" limited="false" damping="0.015"/>
+        <site name="passive_pivot" type="sphere" size="0.035" rgba="0.85 0.85 0.9 1"/>
+        <geom name="link2_geom" fromto="0 0 0 0 0 -0.5" mass="0.5" rgba="0.95 0.45 0.12 1"/>
+        <site name="tip" pos="0 0 -0.5" size="0.015" rgba="0.1 1 0.25 1"/>
+      </body>
+    </body>
+  </worldbody>
+
+  <actuator>
+    <motor name="base_motor" joint="base_joint" gear="1" ctrllimited="true" ctrlrange="-6 6" forcelimited="true" forcerange="-6 6"/>
+  </actuator>
+  <keyframe>
+    <key name="hanging" qpos="0 0" ctrl="0"/>
+    <key name="swing_demo" qpos="0.6 -0.4" ctrl="0"/>
+    <key name="upright" qpos="3.141592653589793 0" ctrl="0"/>
+  </keyframe>
+</mujoco>
