@@ -16,6 +16,7 @@ from double_pendulum.algorithms.sac import (
   SACConfig,
   TransitionBatch,
 )
+from double_pendulum.algorithms.sac.config import SACTrainConfig
 
 
 def test_replay_buffer_handles_batched_ring_wrap() -> None:
@@ -43,7 +44,12 @@ def test_replay_buffer_handles_batched_ring_wrap() -> None:
 
 def test_sac_update_produces_finite_metrics() -> None:
   torch.manual_seed(0)
-  agent = SACAgent(6, 1, SACConfig(hidden_dims=(32, 32)), "cpu")
+  agent = SACAgent(
+    6,
+    1,
+    SACConfig(hidden_dims=(32, 32), learning_rate_schedule="linear"),
+    "cpu",
+  )
   replay = ReplayBuffer(capacity=64, obs_dim=6, action_dim=1, device="cpu")
   obs = torch.randn(32, 6)
   replay.add(
@@ -123,3 +129,21 @@ def test_nan_guard_rejects_corrupt_replay_batch() -> None:
   )
   with pytest.raises(FloatingPointError):
     agent.update(batch)
+
+
+def test_update_budget_is_independent_of_vectorized_collection_size() -> None:
+  from double_pendulum.algorithms.sac import UpdateBudget
+
+  small_batches = UpdateBudget(0.25)
+  large_batches = UpdateBudget(0.25)
+  small_updates = sum(small_batches.add(64) for _ in range(8))
+  large_updates = large_batches.add(512)
+  assert small_updates == large_updates == 128
+  assert small_batches.actual_ratio == large_batches.actual_ratio == 0.25
+
+
+def test_sac_training_defaults_use_transition_based_updates() -> None:
+  config = SACTrainConfig()
+  assert config.batch_size == 256
+  assert config.utd_ratio == 0.25
+  assert config.agent.learning_rate_schedule == "constant"

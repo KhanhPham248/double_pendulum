@@ -12,8 +12,11 @@ from typing import Any
 import yaml
 
 from double_pendulum.common import (
+  DEFAULT_COMBINED_REWARD,
   DEFAULT_CONTRACT,
   DEFAULT_EVALUATION,
+  LEGACY_COMBINED_REWARD,
+  CombinedRewardSpec,
   EvaluationSpec,
   PolicyContract,
 )
@@ -27,6 +30,7 @@ class PolicyManifest:
   policy_sha256: str
   contract: PolicyContract = DEFAULT_CONTRACT
   evaluation: EvaluationSpec = DEFAULT_EVALUATION
+  reward: CombinedRewardSpec = DEFAULT_COMBINED_REWARD
   format_version: int = 1
   policy_type: str = "torque"
   created_at_utc: str = ""
@@ -44,6 +48,7 @@ class PolicyManifest:
   def as_dict(self) -> dict[str, Any]:
     values = asdict(self)
     values["contract"] = self.contract.as_dict()
+    values["reward"] = self.reward.as_dict()
     return values
 
   @classmethod
@@ -56,6 +61,7 @@ class PolicyManifest:
     policy_path: Path,
     contract: PolicyContract = DEFAULT_CONTRACT,
     evaluation: EvaluationSpec = DEFAULT_EVALUATION,
+    reward: CombinedRewardSpec = DEFAULT_COMBINED_REWARD,
   ) -> "PolicyManifest":
     timestamp = datetime.now(timezone.utc).isoformat()
     return cls(
@@ -65,6 +71,7 @@ class PolicyManifest:
       policy_sha256=file_sha256(policy_path),
       contract=contract,
       evaluation=evaluation,
+      reward=reward,
       created_at_utc=timestamp,
     )
 
@@ -73,6 +80,10 @@ class PolicyManifest:
     data = dict(values)
     data["contract"] = PolicyContract.from_dict(data["contract"])
     data["evaluation"] = EvaluationSpec(**data["evaluation"])
+    if "reward" in data:
+      data["reward"] = CombinedRewardSpec(**data["reward"])
+    else:
+      data["reward"] = LEGACY_COMBINED_REWARD
     return cls(**data)
 
 

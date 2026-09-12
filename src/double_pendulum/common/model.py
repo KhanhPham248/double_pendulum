@@ -24,6 +24,16 @@ class DoublePendulumModelCfg:
       raise ValueError("joint damping must be non-negative")
 
 
+def _set_hinge_damping(joint: mujoco.MjsJoint, value: float) -> None:
+  """Set hinge damping across scalar and vector-valued MjSpec APIs."""
+
+  damping = joint.damping
+  if hasattr(damping, "shape"):
+    damping[0] = value
+  else:
+    joint.damping = value
+
+
 def build_double_pendulum_spec(
   cfg: DoublePendulumModelCfg = DoublePendulumModelCfg(),
 ) -> mujoco.MjSpec:
@@ -36,7 +46,7 @@ def build_double_pendulum_spec(
     type=mujoco.mjtJoint.mjJNT_HINGE,
     axis=(0.0, 1.0, 0.0),
   )
-  base_joint.damping = cfg.base_damping
+  _set_hinge_damping(base_joint, cfg.base_damping)
   link1_geom = link1.add_geom(
     name="link1_geom",
     type=mujoco.mjtGeom.mjGEOM_CAPSULE,
@@ -53,7 +63,7 @@ def build_double_pendulum_spec(
     type=mujoco.mjtJoint.mjJNT_HINGE,
     axis=(0.0, 1.0, 0.0),
   )
-  elbow_joint.damping = cfg.elbow_damping
+  _set_hinge_damping(elbow_joint, cfg.elbow_damping)
   link2_geom = link2.add_geom(
     name="link2_geom",
     type=mujoco.mjtGeom.mjGEOM_CAPSULE,

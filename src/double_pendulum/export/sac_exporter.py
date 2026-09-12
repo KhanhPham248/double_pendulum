@@ -10,7 +10,13 @@ import torch
 from torch import nn
 
 from double_pendulum.algorithms.sac import SACAgent
-from double_pendulum.common import DEFAULT_CONTRACT, DEFAULT_EVALUATION, EvaluationSpec
+from double_pendulum.common import (
+  DEFAULT_COMBINED_REWARD,
+  DEFAULT_CONTRACT,
+  DEFAULT_EVALUATION,
+  CombinedRewardSpec,
+  EvaluationSpec,
+)
 
 from .manifest import PolicyManifest, write_manifest
 from .validation import ParityResult, export_atomically, validate_onnx
@@ -36,6 +42,7 @@ def export_sac_policy(
   task: str,
   checkpoint: str,
   evaluation: EvaluationSpec = DEFAULT_EVALUATION,
+  reward: CombinedRewardSpec = DEFAULT_COMBINED_REWARD,
 ) -> ParityResult:
   module = SacInferenceModule(agent).cpu().eval()
   generator = torch.Generator(device="cpu").manual_seed(17)
@@ -72,6 +79,7 @@ def export_sac_policy(
     checkpoint=checkpoint,
     policy_path=destination,
     evaluation=evaluation,
+    reward=reward,
   )
   write_manifest(run_dir / "policy.yaml", manifest)
   return result

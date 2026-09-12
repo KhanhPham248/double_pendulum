@@ -10,7 +10,11 @@ import torch
 
 from mjlab.rl import MjlabOnPolicyRunner
 
-from double_pendulum.common import DEFAULT_CONTRACT, EvaluationSpec
+from double_pendulum.common import (
+  DEFAULT_CONTRACT,
+  CombinedRewardSpec,
+  EvaluationSpec,
+)
 from double_pendulum.export.checkpoints import update_latest_checkpoint
 from double_pendulum.export.manifest import PolicyManifest, write_manifest
 from double_pendulum.export.validation import export_atomically, validate_onnx
@@ -22,11 +26,13 @@ class DoublePendulumPpoRunner(MjlabOnPolicyRunner):
     *args,
     task_name: str,
     evaluation_spec: EvaluationSpec,
+    reward_spec: CombinedRewardSpec,
     export_fail_fast: bool = False,
     **kwargs,
   ) -> None:
     self.task_name = task_name
     self.evaluation_spec = evaluation_spec
+    self.reward_spec = reward_spec
     self.export_fail_fast = export_fail_fast
     self._last_saved_iteration = -1
     super().__init__(*args, **kwargs)
@@ -64,6 +70,7 @@ class DoublePendulumPpoRunner(MjlabOnPolicyRunner):
         "task": self.task_name,
         "algorithm": "ppo",
         "contract": DEFAULT_CONTRACT.as_dict(),
+        "reward": self.reward_spec.as_dict(),
       },
     }
     temporary = checkpoint.with_name(checkpoint.name + ".tmp")
@@ -106,6 +113,7 @@ class DoublePendulumPpoRunner(MjlabOnPolicyRunner):
       checkpoint=str(checkpoint.relative_to(run_dir)),
       policy_path=run_dir / "policy.onnx",
       evaluation=self.evaluation_spec,
+      reward=self.reward_spec,
     )
     write_manifest(run_dir / "policy.yaml", manifest)
     print(

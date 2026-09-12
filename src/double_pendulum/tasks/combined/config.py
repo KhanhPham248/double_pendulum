@@ -20,7 +20,9 @@ from mjlab.sim import MujocoCfg, SimulationCfg
 from mjlab.viewer import ViewerConfig
 
 from double_pendulum.common import (
+  DEFAULT_COMBINED_REWARD,
   DEFAULT_CONTRACT,
+  CombinedRewardSpec,
   DoublePendulumModelCfg,
   EvaluationSpec,
   build_double_pendulum_spec,
@@ -40,6 +42,7 @@ class CombinedTaskCfg:
   near_upright_angle_rad: float = 0.20
   hanging_angle_rad: float = 0.25
   random_velocity_rad_s: float = 1.0
+  reward: CombinedRewardSpec = DEFAULT_COMBINED_REWARD
 
   def __post_init__(self) -> None:
     if min(self.episode_length_s, self.success_hold_s) <= 0.0:
@@ -115,20 +118,36 @@ def make_env_cfg(
     )
   }
   rewards = {
-    "upright": RewardTermCfg(func=mdp.upright_alignment, weight=1.0),
+    "link_alignment": RewardTermCfg(
+      func=mdp.link_alignment,
+      weight=task_cfg.reward.link_alignment_weight,
+    ),
+    "upright_capture": RewardTermCfg(
+      func=mdp.upright_capture,
+      weight=task_cfg.reward.upright_capture_weight,
+      params={"sigma_rad": task_cfg.reward.capture_angle_sigma_rad},
+    ),
     "quiet_upright": RewardTermCfg(
       func=mdp.balancing_bonus,
-      weight=0.5,
+      weight=task_cfg.reward.balancing_bonus_weight,
       params={
         "angle_threshold_rad": task_cfg.stable_angle_rad,
         "velocity_threshold_rad_s": task_cfg.stable_velocity_rad_s,
       },
     ),
-    "near_goal_velocity": RewardTermCfg(
-      func=mdp.near_goal_velocity_l2,
-      weight=-0.03,
+    "upright_velocity": RewardTermCfg(
+      func=mdp.upright_velocity_l2,
+      weight=task_cfg.reward.upright_velocity_weight,
+      params={"sigma_rad": task_cfg.reward.capture_angle_sigma_rad},
     ),
-    "torque": RewardTermCfg(func=mdp.torque_l2, weight=-0.002),
+    "torque": RewardTermCfg(
+      func=mdp.torque_l2,
+      weight=task_cfg.reward.torque_weight,
+    ),
+    "action_rate": RewardTermCfg(
+      func=mdp.action_rate_l2,
+      weight=task_cfg.reward.action_rate_weight,
+    ),
   }
   terminations = {
     "time_limit": TerminationTermCfg(func=mdp.time_out, time_out=True),

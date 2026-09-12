@@ -34,6 +34,7 @@ def simulate(
     required_hold_s=evaluation.success_hold_s,
     angle_threshold_rad=evaluation.angle_threshold_rad,
     velocity_threshold_rad_s=evaluation.velocity_threshold_rad_s,
+    reward_spec=policy.manifest.reward,
   )
   steps = round(duration_s / policy.manifest.contract.control_timestep_s)
   frames = []

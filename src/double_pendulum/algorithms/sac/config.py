@@ -12,7 +12,7 @@ class SACConfig:
   tau: float = 0.005
   learning_rate: float = 3e-4
   minimum_learning_rate: float = 3e-5
-  learning_rate_schedule: Literal["constant", "linear"] = "linear"
+  learning_rate_schedule: Literal["constant", "linear"] = "constant"
   learning_rate_decay_steps: int = 100_000
   hidden_dims: tuple[int, ...] = (256, 256)
   init_alpha: float = 0.2
@@ -49,9 +49,9 @@ class SACTrainConfig:
   num_envs: int = 512
   total_transitions: int = 2_000_000
   replay_capacity: int = 1_000_000
-  batch_size: int = 1024
+  batch_size: int = 256
   learning_starts: int = 25_000
-  updates_per_collect: int = 1
+  utd_ratio: float = 0.25
   checkpoint_interval: int = 200_000
   log_interval: int = 25
   seed: int = 1
@@ -67,7 +67,9 @@ class SACTrainConfig:
       raise ValueError("replay_capacity must be at least batch_size")
     if self.learning_starts < self.batch_size:
       raise ValueError("learning_starts must be at least batch_size")
-    if min(self.updates_per_collect, self.checkpoint_interval, self.log_interval) <= 0:
-      raise ValueError("update, checkpoint and log intervals must be positive")
+    if self.utd_ratio <= 0.0:
+      raise ValueError("utd_ratio must be positive")
+    if min(self.checkpoint_interval, self.log_interval) <= 0:
+      raise ValueError("checkpoint and log intervals must be positive")
     if self.run_dir is not None and self.resume is not None:
       raise ValueError("run_dir and resume cannot be used together")

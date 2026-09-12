@@ -58,6 +58,7 @@ def evaluate_run(
       required_hold_s=evaluation.success_hold_s,
       angle_threshold_rad=evaluation.angle_threshold_rad,
       velocity_threshold_rad_s=evaluation.velocity_threshold_rad_s,
+      reward_spec=policy.manifest.reward,
     )
     for step in range(steps):
       if config.velocity_kick_rad_s != 0.0 and step == kick_step:

@@ -10,10 +10,11 @@ from dataclasses import asdict
 from pathlib import Path
 
 import torch
+import yaml
 
 from mjlab.envs import ManagerBasedRlEnv
 
-from double_pendulum.algorithms.sac import ReplayBuffer, SACAgent
+from double_pendulum.algorithms.sac import ReplayBuffer, SACAgent, UpdateBudget
 from double_pendulum.algorithms.sac.config import SACTrainConfig
 from double_pendulum.common import DEFAULT_CONTRACT
 from double_pendulum.export.checkpoints import (
@@ -31,7 +32,13 @@ from .common import (
   restore_rng_state,
 )
 
-CHECKPOINT_FORMAT = "double_pendulum_sac_v2"
+CHECKPOINT_FORMAT = "double_pendulum_sac_v3"
+
+
+def _dump_config(path: Path, values: dict) -> None:
+  serializable = json.loads(json.dumps(values))
+  with path.open("w", encoding="utf-8") as output:
+    yaml.safe_dump(serializable, output, sort_keys=False)
 
 
 def _actor_observation(observations: dict[str, torch.Tensor]) -> torch.Tensor:
@@ -50,17 +57,21 @@ def _save(
   config: SACTrainConfig,
   transitions: int,
   collects: int,
+  update_budget: UpdateBudget,
   evaluation,
+  reward,
 ) -> Path:
   checkpoint = run_dir / "checkpoints" / f"step_{transitions:012d}.pt"
   state = {
     "format": CHECKPOINT_FORMAT,
     "task": config.task,
     "train_config": asdict(config),
+    "reward": reward.as_dict(),
     "agent": agent.state_dict(),
     "replay": replay.state_dict(),
     "transitions": transitions,
     "collects": collects,
+    "update_budget": update_budget.state_dict(),
     "rng": capture_rng_state(),
   }
   save_torch_checkpoint(state, checkpoint)
@@ -72,6 +83,7 @@ def _save(
       task=config.task,
       checkpoint=str(checkpoint.relative_to(run_dir)),
       evaluation=evaluation,
+      reward=reward,
     )
     print(
       "ONNX_UPDATED "
@@ -100,6 +112,9 @@ def train(config: SACTrainConfig) -> Path:
     requested=config.run_dir,
     resume=config.resume,
   )
+  if config.resume is None:
+    _dump_config(run_dir / "train_config.yaml", asdict(config))
+    _dump_config(run_dir / "task_config.yaml", asdict(task.config))
   logger = MetricsLogger(run_dir)
   env = ManagerBasedRlEnv(cfg=task.make_env_cfg(config.num_envs), device=config.device)
   started = time.monotonic()
@@ -115,16 +130,25 @@ def train(config: SACTrainConfig) -> Path:
     )
     transitions = 0
     collects = 0
+    update_budget = UpdateBudget(config.utd_ratio)
     if config.resume is not None:
       state = torch.load(config.resume, map_location=config.device, weights_only=False)
       if state.get("format") != CHECKPOINT_FORMAT or state.get("task") != config.task:
         raise ValueError("checkpoint format or task does not match this SAC run")
       if state["agent"]["config"] != asdict(config.agent):
         raise ValueError("SAC agent config differs from the checkpoint")
+      if state.get("reward") != task.config.reward.as_dict():
+        raise ValueError("SAC reward config differs from the checkpoint")
       agent.load_state_dict(state["agent"])
       replay.load_state_dict(state["replay"])
       transitions = int(state["transitions"])
       collects = int(state["collects"])
+      update_budget = UpdateBudget.from_state_dict(
+        state["update_budget"],
+        expected_ratio=config.utd_ratio,
+      )
+      if update_budget.total_updates != agent.update_count:
+        raise ValueError("SAC update counters differ inside the checkpoint")
       restore_rng_state(state["rng"])
     else:
       agent.observe(actor_obs)
@@ -166,9 +190,19 @@ def train(config: SACTrainConfig) -> Path:
       stable_streak[dones] = 0
 
       update_metrics: dict[str, float] = {}
+      updates_this_collect = 0
       if transitions >= config.learning_starts and len(replay) >= config.batch_size:
-        for _ in range(config.updates_per_collect):
-          update_metrics = agent.update(replay.sample(config.batch_size))
+        updates_this_collect = update_budget.add(env.num_envs)
+        update_totals: dict[str, float] = {}
+        for _ in range(updates_this_collect):
+          metrics = agent.update(replay.sample(config.batch_size))
+          for name, value in metrics.items():
+            update_totals[name] = update_totals.get(name, 0.0) + value
+        if updates_this_collect:
+          update_metrics = {
+            name: value / updates_this_collect
+            for name, value in update_totals.items()
+          }
 
       if collects % config.log_interval == 0:
         elapsed = max(time.monotonic() - started, 1e-6)
@@ -176,6 +210,10 @@ def train(config: SACTrainConfig) -> Path:
           "train/collect": collects,
           "train/mean_step_reward": float(rewards.mean()),
           "train/replay_size": len(replay),
+          "train/gradient_updates": agent.update_count,
+          "train/updates_this_collect": updates_this_collect,
+          "train/utd_ratio_actual": update_budget.actual_ratio,
+          "train/update_budget_remainder": update_budget.remainder,
           "train/done_fraction": float(dones.float().mean()),
           "train/stable_fraction": float(stable.float().mean()),
           "train/longest_hold_s": float(best_streak.float().max())
@@ -187,6 +225,17 @@ def train(config: SACTrainConfig) -> Path:
           "performance/transitions_per_second": transitions / elapsed,
           **{f"sac/{name}": value for name, value in update_metrics.items()},
         }
+        reward_means = env.reward_manager.step_reward.mean(dim=0)
+        values.update(
+          {
+            f"reward/{name}": float(value)
+            for name, value in zip(
+              env.reward_manager.active_terms,
+              reward_means,
+              strict=True,
+            )
+          }
+        )
         logger.write(transitions, values)
         print(
           json.dumps({"transitions": transitions, **values}, sort_keys=True),
@@ -201,7 +250,9 @@ def train(config: SACTrainConfig) -> Path:
           config=config,
           transitions=transitions,
           collects=collects,
+          update_budget=update_budget,
           evaluation=task.evaluation,
+          reward=task.config.reward,
         )
         last_saved_at = transitions
         while next_checkpoint <= transitions:
@@ -215,7 +266,9 @@ def train(config: SACTrainConfig) -> Path:
         config=config,
         transitions=transitions,
         collects=collects,
+        update_budget=update_budget,
         evaluation=task.evaluation,
+        reward=task.config.reward,
       )
   finally:
     logger.close()
@@ -230,9 +283,9 @@ def parse_args(argv: list[str] | None = None) -> SACTrainConfig:
   parser.add_argument("--num-envs", type=int, default=512)
   parser.add_argument("--total-transitions", type=int, default=2_000_000)
   parser.add_argument("--replay-capacity", type=int, default=1_000_000)
-  parser.add_argument("--batch-size", type=int, default=1024)
+  parser.add_argument("--batch-size", type=int, default=256)
   parser.add_argument("--learning-starts", type=int, default=25_000)
-  parser.add_argument("--updates-per-collect", type=int, default=1)
+  parser.add_argument("--utd-ratio", type=float, default=0.25)
   parser.add_argument("--checkpoint-interval", type=int, default=200_000)
   parser.add_argument("--log-interval", type=int, default=25)
   parser.add_argument("--seed", type=int, default=1)

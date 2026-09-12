@@ -1,0 +1,98 @@
+from __future__ import annotations
+
+import math
+
+import numpy as np
+
+from double_pendulum.common import DEFAULT_COMBINED_REWARD
+from double_pendulum.common.rewards import (
+  absolute_link_alignment,
+  action_rate_l2,
+  upright_proximity,
+  upright_velocity_l2,
+)
+from double_pendulum.evaluation.metrics import EpisodeAccumulator
+
+
+def test_absolute_link_alignment_orders_key_configurations() -> None:
+  hanging = np.array([0.0, 0.0])
+  horizontal = np.array([math.pi / 2.0, 0.0])
+  upright = np.array([math.pi, 0.0])
+
+  assert np.isclose(absolute_link_alignment(hanging, np), -1.0)
+  assert np.isclose(absolute_link_alignment(horizontal, np), 0.0, atol=1e-12)
+  assert np.isclose(absolute_link_alignment(upright, np), 1.0)
+
+
+def test_second_link_reward_uses_its_world_angle() -> None:
+  qpos = np.array([math.pi / 2.0, -math.pi / 2.0])
+  # Link 1 is horizontal and link 2 points down in world coordinates.
+  assert np.isclose(absolute_link_alignment(qpos, np), -0.5, atol=1e-12)
+
+
+def test_alignment_is_symmetric_around_upright() -> None:
+  left = absolute_link_alignment(np.array([math.pi - 0.4, 0.1]), np)
+  right = absolute_link_alignment(np.array([math.pi + 0.4, -0.1]), np)
+  assert np.isclose(left, right)
+
+
+def test_upright_proximity_is_smooth_and_goal_centered() -> None:
+  sigma = DEFAULT_COMBINED_REWARD.capture_angle_sigma_rad
+  upright = upright_proximity(np.array([math.pi, 0.0]), np, sigma_rad=sigma)
+  nearby = upright_proximity(np.array([math.pi + 0.2, -0.1]), np, sigma_rad=sigma)
+  hanging = upright_proximity(np.array([0.0, 0.0]), np, sigma_rad=sigma)
+  assert np.isclose(upright, 1.0)
+  assert upright > nearby > hanging
+
+
+def test_upright_velocity_cost_uses_absolute_link_velocities() -> None:
+  qpos = np.array([math.pi, 0.0])
+  stationary = upright_velocity_l2(qpos, np.zeros(2), np, sigma_rad=0.5)
+  moving = upright_velocity_l2(qpos, np.array([1.0, -1.0]), np, sigma_rad=0.5)
+  assert np.isclose(stationary, 0.0)
+  assert np.isclose(moving, 0.5)
+
+
+def _single_step_return(action: float, qvel: np.ndarray | None = None) -> float:
+  accumulator = EpisodeAccumulator(
+    control_dt=0.02,
+    torque_limit_nm=6.0,
+    required_hold_s=5.0,
+    angle_threshold_rad=0.21,
+    velocity_threshold_rad_s=1.0,
+    reward_spec=DEFAULT_COMBINED_REWARD,
+  )
+  accumulator.add(
+    np.array([math.pi, 0.0]),
+    np.zeros(2) if qvel is None else qvel,
+    action,
+  )
+  return accumulator.episode_return
+
+
+def test_stationary_zero_torque_upright_has_highest_local_reward() -> None:
+  stationary = _single_step_return(0.0)
+  full_torque = _single_step_return(1.0)
+  moving = _single_step_return(0.0, np.array([1.0, 0.0]))
+  assert stationary > full_torque
+  assert stationary > moving
+
+
+def test_action_rate_cost_detects_a_control_jump() -> None:
+  steady = action_rate_l2(np.array([0.4]), np.array([0.4]), np)
+  jump = action_rate_l2(np.array([0.4]), np.array([-0.4]), np)
+  assert np.isclose(steady, 0.0)
+  assert jump > steady
+
+
+def test_straight_hanging_state_is_not_rewarded() -> None:
+  accumulator = EpisodeAccumulator(
+    control_dt=0.02,
+    torque_limit_nm=6.0,
+    required_hold_s=5.0,
+    angle_threshold_rad=0.21,
+    velocity_threshold_rad_s=1.0,
+    reward_spec=DEFAULT_COMBINED_REWARD,
+  )
+  accumulator.add(np.array([0.0, 0.0]), np.zeros(2), 0.0)
+  assert accumulator.episode_return < 0.0

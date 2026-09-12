@@ -50,6 +50,7 @@ def train(config: PPOTrainConfig):
   wrapped = RslRlVecEnvWrapper(env, clip_actions=1.0)
   runner_cfg = make_ppo_runner_cfg(config)
   _dump_config(run_dir / "train_config.yaml", asdict(config))
+  _dump_config(run_dir / "task_config.yaml", asdict(task.config))
   _dump_config(run_dir / "ppo_config.yaml", asdict(runner_cfg))
   runner = DoublePendulumPpoRunner(
     wrapped,
@@ -58,6 +59,7 @@ def train(config: PPOTrainConfig):
     config.device,
     task_name=config.task,
     evaluation_spec=task.evaluation,
+    reward_spec=task.config.reward,
     export_fail_fast=config.export_fail_fast,
   )
   try:

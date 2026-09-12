@@ -94,6 +94,16 @@ class RewardManager(ManagerBase):
   def active_terms(self) -> list[str]:
     return self._term_names
 
+  @property
+  def step_reward(self) -> torch.Tensor:
+    """Weighted reward terms from the latest environment step.
+
+    The returned tensor has shape ``[num_envs, num_terms]`` and is not scaled
+    by the environment timestep. This is intended for diagnostics and logging.
+    """
+
+    return self._step_reward
+
   # Methods.
 
   def reset(

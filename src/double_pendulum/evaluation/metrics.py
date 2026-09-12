@@ -7,7 +7,13 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from double_pendulum.common import DEFAULT_COMBINED_REWARD, CombinedRewardSpec
 from double_pendulum.common.observations import wrapped_angle_error
+from double_pendulum.common.rewards import (
+  absolute_link_alignment,
+  upright_proximity,
+  upright_velocity_l2,
+)
 
 
 @dataclass
@@ -17,6 +23,7 @@ class EpisodeAccumulator:
   required_hold_s: float
   angle_threshold_rad: float
   velocity_threshold_rad_s: float
+  reward_spec: CombinedRewardSpec = DEFAULT_COMBINED_REWARD
   steps: int = 0
   stable_steps: int = 0
   stable_streak: int = 0
@@ -56,17 +63,45 @@ class EpisodeAccumulator:
     self.was_stable = stable
 
     torque = action * self.torque_limit_nm
-    upright_reward = 0.5 * (math.cos(qpos[0] - math.pi) + math.cos(qpos[1]))
-    error_sq = q1_error**2 + q2_error**2
-    velocity_cost = math.exp(-error_sq / 0.35**2) * float(np.square(qvel).sum())
+    reward = self.reward_spec
+    if reward.formula_version == 1:
+      alignment = 0.5 * (math.cos(qpos[0] - math.pi) + math.cos(qpos[1]))
+      capture = 0.0
+      error_sq = q1_error**2 + q2_error**2
+      velocity_cost = math.exp(
+        -error_sq / reward.capture_angle_sigma_rad**2
+      ) * float(np.square(qvel).sum())
+    else:
+      alignment = float(absolute_link_alignment(qpos, np))
+      capture = float(
+        upright_proximity(
+          qpos,
+          np,
+          sigma_rad=reward.capture_angle_sigma_rad,
+        )
+      )
+      velocity_cost = float(
+        upright_velocity_l2(
+          qpos,
+          qvel,
+          np,
+          sigma_rad=reward.capture_angle_sigma_rad,
+        )
+      )
+    action_rate = (action - self.previous_action) ** 2
     self.episode_return += (
-      upright_reward + 0.5 * float(stable) - 0.03 * velocity_cost - 0.002 * action**2
+      reward.link_alignment_weight * alignment
+      + reward.upright_capture_weight * capture
+      + reward.balancing_bonus_weight * float(stable)
+      + reward.upright_velocity_weight * velocity_cost
+      + reward.torque_weight * action**2
+      + reward.action_rate_weight * action_rate
     )
     self.angle_error_sum += angle_error
     self.angular_velocity_sum += angular_velocity
     self.abs_torque_sum += abs(torque)
     self.torque_square_integral += torque**2 * self.control_dt
-    self.action_rate_square_sum += (action - self.previous_action) ** 2
+    self.action_rate_square_sum += action_rate
     self.saturation_steps += int(abs(action) > 0.99)
     self.previous_action = action
     self.final_angle_error = angle_error

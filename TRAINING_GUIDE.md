@@ -90,6 +90,8 @@ python scripts/train_sac.py \
   --device cuda:0 \
   --num-envs 64 \
   --total-transitions 2000000 \
+  --batch-size 256 \
+  --utd-ratio 0.25 \
   --export-fail-fast
 ```
 
@@ -103,6 +105,59 @@ python scripts/train_ppo.py \
   --max-iterations 2000 \
   --export-fail-fast
 ```
+
+Task `combined` hiện dùng reward formula v2. Formula này đánh giá hướng tuyệt
+đối của cả hai link bằng `q1` và `q1 + q2`; nó không thưởng riêng cho việc giữ
+khớp khuỷu thẳng như baseline v1. Reward version và toàn bộ weight được lưu
+trong `task_config.yaml` và `policy.yaml` của run mới.
+
+### PPO reward-v2 validation run
+
+Để cô lập ảnh hưởng của reward, lần chạy đầu tiên phải giữ nguyên
+hyperparameter PPO và chỉ sử dụng task/reward mới:
+
+```bash
+python scripts/train_ppo.py \
+  --task combined \
+  --device cuda:0 \
+  --num-envs 512 \
+  --max-iterations 2000 \
+  --save-interval 50 \
+  --seed 1 \
+  --run-dir runs/combined/ppo/reward_v2_seed1 \
+  --export-fail-fast
+```
+
+Không resume checkpoint reward-v1 cho thí nghiệm này. Policy phải học lại từ
+đầu để kết quả A/B có ý nghĩa.
+
+Sau khi train, kiểm tra từ trạng thái upright trước:
+
+```bash
+python scripts/evaluate.py \
+  --run runs/combined/ppo/reward_v2_seed1 \
+  --episodes 100 \
+  --duration 60 \
+  --reset-mode upright
+```
+
+Sau đó kiểm tra toàn bộ swing-up từ trạng thái hanging:
+
+```bash
+python scripts/evaluate.py \
+  --run runs/combined/ppo/reward_v2_seed1 \
+  --episodes 100 \
+  --duration 20 \
+  --reset-mode hanging
+```
+
+Các dấu hiệu reward fix hoạt động đúng:
+
+- action tại upright không còn liên tục chạm `-1` hoặc `+1`;
+- `action_saturation_fraction` giảm rõ rệt so với baseline `96.37%`;
+- `longest_hold_s` vượt 5 giây từ upright;
+- reward `quiet_upright` và `upright_capture` tăng trong TensorBoard;
+- reward không còn bị một thành phần giữ khuỷu thẳng chi phối.
 
 Xem toàn bộ tham số được hỗ trợ:
 

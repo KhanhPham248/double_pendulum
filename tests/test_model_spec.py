@@ -17,6 +17,7 @@ def test_raw_model_has_two_hinges_and_no_hidden_actuator() -> None:
     mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, index)
     for index in range(model.njnt)
   ] == ["base_joint", "elbow_joint"]
+  assert np.allclose(model.dof_damping, (0.025, 0.015))
 
 
 def test_upright_target_places_tip_above_the_base() -> None:

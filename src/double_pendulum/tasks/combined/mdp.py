@@ -8,6 +8,13 @@ from typing import TYPE_CHECKING
 import torch
 
 from double_pendulum.common.observations import policy_observation
+from double_pendulum.common.rewards import (
+  absolute_link_alignment,
+  action_l2,
+  action_rate_l2 as common_action_rate_l2,
+  upright_proximity,
+  upright_velocity_l2 as common_upright_velocity_l2,
+)
 
 if TYPE_CHECKING:
   from mjlab.envs import ManagerBasedRlEnv
@@ -76,9 +83,18 @@ def policy_state(env: ManagerBasedRlEnv) -> torch.Tensor:
   return policy_observation(qpos, qvel, torch)
 
 
-def upright_alignment(env: ManagerBasedRlEnv) -> torch.Tensor:
+def link_alignment(env: ManagerBasedRlEnv) -> torch.Tensor:
   qpos, _ = state(env)
-  return 0.5 * (torch.cos(qpos[:, 0] - math.pi) + torch.cos(qpos[:, 1]))
+  return absolute_link_alignment(qpos, torch)
+
+
+def upright_capture(
+  env: ManagerBasedRlEnv,
+  *,
+  sigma_rad: float,
+) -> torch.Tensor:
+  qpos, _ = state(env)
+  return upright_proximity(qpos, torch, sigma_rad=sigma_rad)
 
 
 def stable_mask(
@@ -107,17 +123,30 @@ def balancing_bonus(
   ).float()
 
 
-def near_goal_velocity_l2(env: ManagerBasedRlEnv) -> torch.Tensor:
+def upright_velocity_l2(
+  env: ManagerBasedRlEnv,
+  *,
+  sigma_rad: float,
+) -> torch.Tensor:
   qpos, qvel = state(env)
-  error_sq = torch.square(angle_error(qpos[:, 0], math.pi)) + torch.square(
-    angle_error(qpos[:, 1], 0.0)
+  return common_upright_velocity_l2(
+    qpos,
+    qvel,
+    torch,
+    sigma_rad=sigma_rad,
   )
-  return torch.exp(-error_sq / (0.35**2)) * torch.sum(torch.square(qvel), dim=1)
 
 
 def torque_l2(env: ManagerBasedRlEnv) -> torch.Tensor:
-  action = env.action_manager.get_term("base_torque").raw_action
-  return torch.sum(torch.square(action), dim=1)
+  return action_l2(env.action_manager.action, torch)
+
+
+def action_rate_l2(env: ManagerBasedRlEnv) -> torch.Tensor:
+  return common_action_rate_l2(
+    env.action_manager.action,
+    env.action_manager.prev_action,
+    torch,
+  )
 
 
 def time_out(env: ManagerBasedRlEnv) -> torch.Tensor:

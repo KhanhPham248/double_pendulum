@@ -12,4 +12,12 @@ def test_combined_task_has_one_shared_contract() -> None:
   assert env.decimation == DEFAULT_CONTRACT.decimation
   assert env.sim.mujoco.timestep == DEFAULT_CONTRACT.physics_timestep_s
   assert tuple(env.actions) == ("base_torque",)
+  assert tuple(env.rewards) == (
+    "link_alignment",
+    "upright_capture",
+    "quiet_upright",
+    "upright_velocity",
+    "torque",
+    "action_rate",
+  )
   assert task.evaluation.success_hold_s == 5.0
