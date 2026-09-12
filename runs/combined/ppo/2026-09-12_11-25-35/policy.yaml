@@ -1,0 +1,29 @@
+task: combined
+algorithm: ppo
+checkpoint: checkpoints/iteration_00001999.pt
+policy_sha256: 64d347f8ea6acdcb7b4e3e3f30264003b43dab9d1f5279a52643f0671013d591
+contract:
+  observation_names:
+  - sin_q1
+  - cos_q1
+  - sin_q2
+  - cos_q2
+  - qdot1
+  - qdot2
+  action_names:
+  - base_torque
+  joint_names:
+  - base_joint
+  - elbow_joint
+  actuated_joint: base_joint
+  torque_limit_nm: 6.0
+  physics_timestep_s: 0.002
+  control_timestep_s: 0.02
+evaluation:
+  angle_threshold_rad: 0.21
+  velocity_threshold_rad_s: 1.0
+  success_hold_s: 5.0
+  default_duration_s: 20.0
+format_version: 1
+policy_type: torque
+created_at_utc: '2026-09-12T11:36:52.803423+00:00'

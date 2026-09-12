@@ -1,0 +1,31 @@
+task: combined
+device: cuda:0
+num_envs: 64
+total_transitions: 2000000
+replay_capacity: 1000000
+batch_size: 256
+learning_starts: 25000
+utd_ratio: 0.25
+checkpoint_interval: 100000
+log_interval: 1000
+seed: 1
+run_dir: runs/combined/sac/reward_v3_seed1
+resume: null
+export_fail_fast: true
+agent:
+  gamma: 0.995
+  tau: 0.005
+  learning_rate: 0.0003
+  minimum_learning_rate: 3.0e-05
+  learning_rate_schedule: constant
+  learning_rate_decay_steps: 100000
+  hidden_dims:
+  - 256
+  - 256
+  init_alpha: 0.2
+  target_entropy: null
+  reward_scale: 1.0
+  max_grad_norm: 10.0
+  normalize_observations: true
+  observation_clip: 10.0
+  nan_guard: true

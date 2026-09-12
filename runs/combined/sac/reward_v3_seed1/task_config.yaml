@@ -1,0 +1,20 @@
+episode_length_s: 20.0
+success_hold_s: 5.0
+stable_angle_rad: 0.21
+stable_velocity_rad_s: 1.0
+near_upright_probability: 0.2
+hanging_probability: 0.35
+near_upright_angle_rad: 0.2
+hanging_angle_rad: 0.25
+random_velocity_rad_s: 1.0
+reward:
+  formula_version: 3
+  link_alignment_weight: 1.0
+  upright_capture_weight: 2.0
+  balancing_bonus_weight: 2.0
+  upright_velocity_weight: -0.1
+  torque_weight: -0.01
+  action_rate_weight: -0.02
+  capture_angle_sigma_rad: 0.5
+  capture_base_sigma_rad: 0.35
+  capture_elbow_sigma_rad: 0.45
