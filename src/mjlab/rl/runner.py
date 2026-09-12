@@ -49,7 +49,10 @@ class MjlabOnPolicyRunner(OnPolicyRunner):
       verbose=verbose,
       input_names=onnx_model.input_names,  # type: ignore[arg-type]
       output_names=onnx_model.output_names,  # type: ignore[arg-type]
-      dynamic_axes={},
+      dynamic_axes={
+        onnx_model.input_names[0]: {0: "batch"},  # type: ignore[index]
+        onnx_model.output_names[0]: {0: "batch"},  # type: ignore[index]
+      },
       dynamo=False,
     )
 

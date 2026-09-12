@@ -20,6 +20,7 @@ dependencies = [
   "prettytable",
   "pyyaml>=6.0",
   "rsl-rl-lib==5.0.1",
+  "scipy>=1.13",
   "tensorboard>=2.20.0",
   "torch>=2.7.0",
   "tqdm",
