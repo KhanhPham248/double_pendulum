@@ -95,6 +95,10 @@ python scripts/train_sac.py \
   --export-fail-fast
 ```
 
+Reward-v2 SAC dùng checkpoint format `double_pendulum_sac_v3`, trong đó có
+trạng thái update budget và reward metadata. Không resume checkpoint SAC cũ
+được tạo với reward-v1/format v2; hãy bắt đầu một run mới.
+
 ### PPO với mJLab/RSL-RL
 
 ```bash
