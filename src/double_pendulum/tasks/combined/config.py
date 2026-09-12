@@ -125,7 +125,10 @@ def make_env_cfg(
     "upright_capture": RewardTermCfg(
       func=mdp.upright_capture,
       weight=task_cfg.reward.upright_capture_weight,
-      params={"sigma_rad": task_cfg.reward.capture_angle_sigma_rad},
+      params={
+        "base_sigma_rad": task_cfg.reward.capture_base_sigma_rad,
+        "elbow_sigma_rad": task_cfg.reward.capture_elbow_sigma_rad,
+      },
     ),
     "quiet_upright": RewardTermCfg(
       func=mdp.balancing_bonus,
@@ -138,7 +141,10 @@ def make_env_cfg(
     "upright_velocity": RewardTermCfg(
       func=mdp.upright_velocity_l2,
       weight=task_cfg.reward.upright_velocity_weight,
-      params={"sigma_rad": task_cfg.reward.capture_angle_sigma_rad},
+      params={
+        "base_sigma_rad": task_cfg.reward.capture_base_sigma_rad,
+        "elbow_sigma_rad": task_cfg.reward.capture_elbow_sigma_rad,
+      },
     ),
     "torque": RewardTermCfg(
       func=mdp.torque_l2,

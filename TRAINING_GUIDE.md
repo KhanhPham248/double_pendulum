@@ -115,7 +115,7 @@ Task `combined` hiện dùng reward formula v2. Formula này đánh giá hướn
 khớp khuỷu thẳng như baseline v1. Reward version và toàn bộ weight được lưu
 trong `task_config.yaml` và `policy.yaml` của run mới.
 
-### PPO reward-v2 validation run
+### PPO reward-v3 validation run
 
 Để cô lập ảnh hưởng của reward, lần chạy đầu tiên phải giữ nguyên
 hyperparameter PPO và chỉ sử dụng task/reward mới:
@@ -128,7 +128,7 @@ python scripts/train_ppo.py \
   --max-iterations 2000 \
   --save-interval 50 \
   --seed 1 \
-  --run-dir runs/combined/ppo/reward_v2_seed1 \
+  --run-dir runs/combined/ppo/reward_v3_seed1 \
   --export-fail-fast
 ```
 
@@ -139,7 +139,7 @@ Sau khi train, kiểm tra từ trạng thái upright trước:
 
 ```bash
 python scripts/evaluate.py \
-  --run runs/combined/ppo/reward_v2_seed1 \
+  --run runs/combined/ppo/reward_v3_seed1 \
   --episodes 100 \
   --duration 60 \
   --reset-mode upright
@@ -149,7 +149,7 @@ Sau đó kiểm tra toàn bộ swing-up từ trạng thái hanging:
 
 ```bash
 python scripts/evaluate.py \
-  --run runs/combined/ppo/reward_v2_seed1 \
+  --run runs/combined/ppo/reward_v3_seed1 \
   --episodes 100 \
   --duration 20 \
   --reset-mode hanging

@@ -8,8 +8,8 @@ from double_pendulum.common import DEFAULT_COMBINED_REWARD
 from double_pendulum.common.rewards import (
   absolute_link_alignment,
   action_rate_l2,
-  upright_proximity,
-  upright_velocity_l2,
+  capture_weighted_upright_velocity_l2,
+  upright_capture,
 )
 from double_pendulum.evaluation.metrics import EpisodeAccumulator
 
@@ -36,19 +36,46 @@ def test_alignment_is_symmetric_around_upright() -> None:
   assert np.isclose(left, right)
 
 
-def test_upright_proximity_is_smooth_and_goal_centered() -> None:
-  sigma = DEFAULT_COMBINED_REWARD.capture_angle_sigma_rad
-  upright = upright_proximity(np.array([math.pi, 0.0]), np, sigma_rad=sigma)
-  nearby = upright_proximity(np.array([math.pi + 0.2, -0.1]), np, sigma_rad=sigma)
-  hanging = upright_proximity(np.array([0.0, 0.0]), np, sigma_rad=sigma)
+def _capture(qpos: np.ndarray) -> float:
+  reward = DEFAULT_COMBINED_REWARD
+  return float(
+    upright_capture(
+      qpos,
+      np,
+      base_sigma_rad=reward.capture_base_sigma_rad,
+      elbow_sigma_rad=reward.capture_elbow_sigma_rad,
+    )
+  )
+
+
+def test_upright_capture_is_smooth_and_goal_centered() -> None:
+  upright = _capture(np.array([math.pi, 0.0]))
+  nearby = _capture(np.array([math.pi + 0.2, -0.1]))
+  hanging = _capture(np.array([0.0, 0.0]))
   assert np.isclose(upright, 1.0)
   assert upright > nearby > hanging
 
 
+def test_upright_capture_uses_relative_elbow_error() -> None:
+  correct_pose = _capture(np.array([math.pi, 0.0]))
+  bent_elbow = _capture(np.array([math.pi, 0.45]))
+  assert np.isclose(bent_elbow, math.exp(-1.0))
+  assert correct_pose > bent_elbow
+
+
 def test_upright_velocity_cost_uses_absolute_link_velocities() -> None:
   qpos = np.array([math.pi, 0.0])
-  stationary = upright_velocity_l2(qpos, np.zeros(2), np, sigma_rad=0.5)
-  moving = upright_velocity_l2(qpos, np.array([1.0, -1.0]), np, sigma_rad=0.5)
+  reward = DEFAULT_COMBINED_REWARD
+  kwargs = {
+    "base_sigma_rad": reward.capture_base_sigma_rad,
+    "elbow_sigma_rad": reward.capture_elbow_sigma_rad,
+  }
+  stationary = capture_weighted_upright_velocity_l2(
+    qpos, np.zeros(2), np, **kwargs
+  )
+  moving = capture_weighted_upright_velocity_l2(
+    qpos, np.array([1.0, -1.0]), np, **kwargs
+  )
   assert np.isclose(stationary, 0.0)
   assert np.isclose(moving, 0.5)
 

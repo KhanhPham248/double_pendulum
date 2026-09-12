@@ -12,8 +12,8 @@ from double_pendulum.common.rewards import (
   absolute_link_alignment,
   action_l2,
   action_rate_l2 as common_action_rate_l2,
-  upright_proximity,
-  upright_velocity_l2 as common_upright_velocity_l2,
+  capture_weighted_upright_velocity_l2,
+  upright_capture as common_upright_capture,
 )
 
 if TYPE_CHECKING:
@@ -91,10 +91,16 @@ def link_alignment(env: ManagerBasedRlEnv) -> torch.Tensor:
 def upright_capture(
   env: ManagerBasedRlEnv,
   *,
-  sigma_rad: float,
+  base_sigma_rad: float,
+  elbow_sigma_rad: float,
 ) -> torch.Tensor:
   qpos, _ = state(env)
-  return upright_proximity(qpos, torch, sigma_rad=sigma_rad)
+  return common_upright_capture(
+    qpos,
+    torch,
+    base_sigma_rad=base_sigma_rad,
+    elbow_sigma_rad=elbow_sigma_rad,
+  )
 
 
 def stable_mask(
@@ -126,14 +132,16 @@ def balancing_bonus(
 def upright_velocity_l2(
   env: ManagerBasedRlEnv,
   *,
-  sigma_rad: float,
+  base_sigma_rad: float,
+  elbow_sigma_rad: float,
 ) -> torch.Tensor:
   qpos, qvel = state(env)
-  return common_upright_velocity_l2(
+  return capture_weighted_upright_velocity_l2(
     qpos,
     qvel,
     torch,
-    sigma_rad=sigma_rad,
+    base_sigma_rad=base_sigma_rad,
+    elbow_sigma_rad=elbow_sigma_rad,
   )
 
 
