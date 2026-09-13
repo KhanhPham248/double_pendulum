@@ -224,6 +224,7 @@ runs/<task>/<algorithm>/<timestamp>/
 │   ├── policy.onnx
 │   ├── policy.yaml
 │   ├── evaluation.json
+│   ├── selection.json
 │   └── checkpoint.txt
 ├── evaluations/
 │   └── step_XXXXXXXXXXXX.json
@@ -237,9 +238,27 @@ export và parity check thành công. Nếu export lỗi, checkpoint vẫn đư�
 ONNX hợp lệ trước đó không bị thay thế.
 
 Mỗi lần lưu checkpoint, trainer chạy deterministic evaluation từ trạng thái
-`hanging`. Các metric `eval/hanging/*` được ghi vào TensorBoard và W&B. Thư mục
-`best/` chỉ cập nhật khi policy mới tốt hơn theo thứ tự: success rate, thời gian
-giữ lâu nhất, upright fraction, episode return và torque.
+`hanging` với mặc định `20` episode. Các metric `eval/hanging/*` được ghi vào
+TensorBoard và W&B. Thư mục `best/` trỏ tới một bundle versioned hoàn chỉnh; bản
+thay thế được publish cùng lúc để `policy.onnx`, `policy.yaml` và evaluation
+không lệch nhau. Checkpoint native `.pt` không được copy vào `best/`; đường dẫn
+tương đối được ghi trong `checkpoint.txt` và `selection.json`. Bundle cũ được
+giữ lại nếu có để không mất kết quả trước đó.
+
+`best/` được xếp hạng theo các metric sau success, theo thứ tự:
+
+1. `success_rate`;
+2. `post_success_stable_fraction`;
+3. ít `post_success_escape_count` hơn;
+4. `time_to_success_s` thấp hơn;
+5. `post_success_mean_angle_error_rad` thấp hơn;
+6. `post_success_mean_angular_velocity_rad_s` thấp hơn;
+7. `post_success_mean_abs_torque_nm` thấp hơn.
+
+`longest_hold_s` và `upright_fraction` toàn episode vẫn được ghi để chẩn đoán,
+nhưng không còn là tiêu chí chính vì chúng phụ thuộc vào thời gian swing-up.
+`episode_return` không dùng để so sánh giữa các reward formula version khác
+nhau.
 
 Theo dõi log bằng:
 
@@ -259,7 +278,10 @@ Khi chạy với `--wandb`, log TensorBoard local vẫn được giữ và đư�
 W&B. Link của run được in ở dòng `WANDB_RUN=...`. Các biểu đồ quan trọng để
 nhận biết bão hòa hoặc collapse là:
 
-- `eval/hanging/success_rate` và `eval/hanging/longest_hold_s`;
+- `eval/hanging/success_rate`, `eval/hanging/time_to_success_s` và
+  `eval/hanging/post_success_stable_fraction`;
+- `eval/hanging/post_success_escape_count` và các metric angle/velocity/torque
+  sau success;
 - `eval/hanging/action_saturation_fraction`;
 - PPO: `Loss/value`, `Policy/mean_std`, `Loss/learning_rate`;
 - SAC: `sac/critic_loss`, `sac/actor_grad_norm`, `sac/learning_rate`.
@@ -267,6 +289,20 @@ nhận biết bão hòa hoặc collapse là:
 Đừng chọn checkpoint chỉ dựa trên `train/stable_fraction`. Metric đó là snapshot
 của vector environment; `eval/hanging/success_rate` mới kiểm tra trọn vẹn quá
 trình swing-up bằng actor deterministic.
+
+Để so sánh PPO và SAC hoặc các reward version, dùng cùng một protocol:
+
+```bash
+python scripts/evaluate.py --run RUN_A --episodes 100 --duration 20 \
+  --reset-mode hanging --seed 10001
+python scripts/evaluate.py --run RUN_A --episodes 100 --duration 20 \
+  --reset-mode upright --seed 10001
+```
+
+Thay `RUN_A` bằng từng policy cần đối chiếu. Giữ nguyên model, seed, số episode,
+duration và reset mode. So sánh `episode_return` chỉ trong cùng reward version;
+giữa các version, ưu tiên success, time-to-success, post-success stability,
+escape, angle error, angular velocity và torque.
 
 ## 7. Resume training
 

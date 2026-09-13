@@ -3,27 +3,38 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
+import uuid
 from pathlib import Path
 from typing import Any
 
 from double_pendulum.evaluation import EvaluationConfig, evaluate_run
 
+_NEGATIVE_SENTINEL = -1.0e12
+_POSITIVE_SENTINEL = 1.0e12
+
 
 def _score(report: dict[str, Any]) -> tuple[float, ...]:
   aggregate = report["aggregate"]
 
-  def value(name: str, default: float = float("-inf")) -> float:
+  def value(name: str, default: float = _NEGATIVE_SENTINEL) -> float:
     result = aggregate.get(name)
-    return default if result is None else float(result)
+    if result is None:
+      return default
+    converted = float(result)
+    return default if not math.isfinite(converted) else converted
 
   return (
     value("success_rate"),
-    value("longest_hold_s"),
-    value("upright_fraction"),
-    value("episode_return"),
-    -value("mean_abs_torque_nm", default=float("inf")),
+    value("post_success_stable_fraction"),
+    -value("post_success_escape_count", default=_POSITIVE_SENTINEL),
+    -value("time_to_success_s", default=_POSITIVE_SENTINEL),
+    -value("post_success_mean_angle_error_rad", default=_POSITIVE_SENTINEL),
+    -value("post_success_mean_angular_velocity_rad_s", default=_POSITIVE_SENTINEL),
+    -value("post_success_mean_abs_torque_nm", default=_POSITIVE_SENTINEL),
+    -value("post_success_action_saturation_fraction", default=_POSITIVE_SENTINEL),
   )
 
 
@@ -82,20 +93,59 @@ class CheckpointMonitor:
     is_best = self.best_score is None or score > self.best_score
     metrics[f"eval/{self.reset_mode}/is_best"] = float(is_best)
     if is_best:
+      self._publish_best(
+        checkpoint=checkpoint,
+        evaluation_path=output,
+        report=report,
+        score=score,
+      )
       self.best_score = score
-      self.best_dir.mkdir(parents=True, exist_ok=True)
-      _atomic_copy(self.run_dir / "policy.onnx", self.best_dir / "policy.onnx")
-      _atomic_copy(self.run_dir / "policy.yaml", self.best_dir / "policy.yaml")
-      _atomic_copy(output, self.best_dir / "evaluation.json")
-      reference = self.best_dir / "checkpoint.txt"
-      temporary = reference.with_name(reference.name + ".tmp")
-      try:
-        temporary.write_text(
-          str(checkpoint.relative_to(self.run_dir)) + "\n",
-          encoding="utf-8",
-        )
-        os.replace(temporary, reference)
-      finally:
-        temporary.unlink(missing_ok=True)
     metrics[f"eval/{self.reset_mode}/best_success_rate"] = self.best_score[0]
     return metrics
+
+  def _publish_best(
+    self,
+    *,
+    checkpoint: Path,
+    evaluation_path: Path,
+    report: dict[str, Any],
+    score: tuple[float, ...],
+  ) -> None:
+    bundle_name = f".best-{uuid.uuid4().hex}"
+    staged = self.run_dir / bundle_name
+    staged.mkdir()
+    try:
+      _atomic_copy(self.run_dir / "policy.onnx", staged / "policy.onnx")
+      _atomic_copy(self.run_dir / "policy.yaml", staged / "policy.yaml")
+      _atomic_copy(evaluation_path, staged / "evaluation.json")
+      (staged / "checkpoint.txt").write_text(
+        str(checkpoint.relative_to(self.run_dir)) + "\n", encoding="utf-8"
+      )
+      selection = {
+        "checkpoint": str(checkpoint.relative_to(self.run_dir)),
+        "reset_mode": self.reset_mode,
+        "episodes": self.episodes,
+        "score": list(score),
+        "aggregate": report["aggregate"],
+      }
+      (staged / "selection.json").write_text(
+        json.dumps(selection, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+      )
+
+      published = self.run_dir / f"best-{uuid.uuid4().hex}"
+      os.replace(staged, published)
+      link = self.run_dir / ".best-link"
+      link.unlink(missing_ok=True)
+      link.symlink_to(published.name)
+      if self.best_dir.is_symlink():
+        os.replace(link, self.best_dir)
+      elif self.best_dir.exists():
+        legacy = self.run_dir / f"best-legacy-{uuid.uuid4().hex}"
+        os.replace(self.best_dir, legacy)
+        os.replace(link, self.best_dir)
+      else:
+        os.replace(link, self.best_dir)
+    except Exception:
+      shutil.rmtree(staged, ignore_errors=True)
+      raise

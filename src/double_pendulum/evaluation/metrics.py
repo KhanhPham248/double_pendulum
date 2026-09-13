@@ -32,6 +32,14 @@ class EpisodeAccumulator:
   stable_streak: int = 0
   best_streak: int = 0
   first_upright_step: int | None = None
+  success_step: int | None = None
+  post_success_steps: int = 0
+  post_success_stable_steps: int = 0
+  post_success_angle_error_sum: float = 0.0
+  post_success_angular_velocity_sum: float = 0.0
+  post_success_abs_torque_sum: float = 0.0
+  post_success_saturation_steps: int = 0
+  post_success_escape_count: int = 0
   escape_count: int = 0
   was_stable: bool = False
   episode_return: float = 0.0
@@ -43,6 +51,10 @@ class EpisodeAccumulator:
   saturation_steps: int = 0
   previous_action: float = 0.0
   final_angle_error: float = 0.0
+
+  @property
+  def required_hold_steps(self) -> int:
+    return math.ceil(self.required_hold_s / self.control_dt)
 
   def add(self, qpos: np.ndarray, qvel: np.ndarray, action: float) -> None:
     q1_error = abs(float(wrapped_angle_error(qpos[0], math.pi, np)))
@@ -62,6 +74,8 @@ class EpisodeAccumulator:
       self.stable_streak = 0
       if self.was_stable:
         self.escape_count += 1
+        if self.success_step is not None:
+          self.post_success_escape_count += 1
     self.best_streak = max(self.best_streak, self.stable_streak)
     self.was_stable = stable
 
@@ -133,15 +147,57 @@ class EpisodeAccumulator:
     self.final_angle_error = angle_error
     self.steps += 1
 
+    was_successful_before_step = self.success_step is not None
+    if self.success_step is None and self.stable_streak >= self.required_hold_steps:
+      self.success_step = self.steps - 1
+    if was_successful_before_step:
+      self.post_success_steps += 1
+      self.post_success_stable_steps += int(stable)
+      self.post_success_angle_error_sum += angle_error
+      self.post_success_angular_velocity_sum += angular_velocity
+      self.post_success_abs_torque_sum += abs(torque)
+      self.post_success_saturation_steps += int(abs(action) > 0.99)
+
   def result(self) -> dict[str, float | None]:
     count = max(self.steps, 1)
     first = self.first_upright_step
+    post_count = self.post_success_steps
     return {
       "success": float(self.best_streak * self.control_dt >= self.required_hold_s),
       "episode_return": self.episode_return,
       "swing_up_time_s": None if first is None else first * self.control_dt,
+      "time_to_success_s": (
+        None if self.success_step is None else (self.success_step + 1) * self.control_dt
+      ),
       "longest_hold_s": self.best_streak * self.control_dt,
       "upright_fraction": self.stable_steps / count,
+      "post_success_duration_s": post_count * self.control_dt,
+      "post_success_stable_fraction": (
+        None if post_count == 0 else self.post_success_stable_steps / post_count
+      ),
+      "post_success_escape_count": (
+        None if self.success_step is None else float(self.post_success_escape_count)
+      ),
+      "post_success_mean_angle_error_rad": (
+        None
+        if post_count == 0
+        else self.post_success_angle_error_sum / post_count
+      ),
+      "post_success_mean_angular_velocity_rad_s": (
+        None
+        if post_count == 0
+        else self.post_success_angular_velocity_sum / post_count
+      ),
+      "post_success_mean_abs_torque_nm": (
+        None
+        if post_count == 0
+        else self.post_success_abs_torque_sum / post_count
+      ),
+      "post_success_action_saturation_fraction": (
+        None
+        if post_count == 0
+        else self.post_success_saturation_steps / post_count
+      ),
       "final_angle_error_rad": self.final_angle_error,
       "mean_angle_error_rad": self.angle_error_sum / count,
       "mean_angular_velocity_rad_s": self.angular_velocity_sum / count,

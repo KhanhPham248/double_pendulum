@@ -48,3 +48,24 @@ def test_five_second_hold_is_success() -> None:
   result = accumulator.result()
   assert result["success"] == 1.0
   assert result["longest_hold_s"] == 5.0
+
+
+def test_post_success_metrics_start_after_required_hold() -> None:
+  accumulator = EpisodeAccumulator(
+    control_dt=0.02,
+    torque_limit_nm=6.0,
+    required_hold_s=5.0,
+    angle_threshold_rad=0.21,
+    velocity_threshold_rad_s=1.0,
+  )
+  for _ in range(250):
+    accumulator.add(np.array([math.pi, 0.0]), np.zeros(2), 0.0)
+  for _ in range(50):
+    accumulator.add(np.zeros(2), np.zeros(2), 0.0)
+
+  result = accumulator.result()
+  assert result["success"] == 1.0
+  assert result["time_to_success_s"] == 5.0
+  assert result["post_success_duration_s"] == 1.0
+  assert math.isclose(result["post_success_stable_fraction"], 0.0)
+  assert result["post_success_escape_count"] == 1.0

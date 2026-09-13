@@ -28,7 +28,7 @@ class DoublePendulumPpoRunner(MjlabOnPolicyRunner):
     evaluation_spec: EvaluationSpec,
     reward_spec: CombinedRewardSpec,
     export_fail_fast: bool = False,
-    evaluation_episodes: int = 10,
+    evaluation_episodes: int = 20,
     **kwargs,
   ) -> None:
     self.task_name = task_name

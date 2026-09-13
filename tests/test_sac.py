@@ -148,4 +148,4 @@ def test_sac_training_defaults_use_transition_based_updates() -> None:
   assert config.utd_ratio == 0.25
   assert config.agent.learning_rate_schedule == "constant"
   assert config.agent.learning_rate_decay_steps == 100_000
-  assert config.evaluation_episodes == 10
+  assert config.evaluation_episodes == 20

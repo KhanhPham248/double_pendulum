@@ -18,7 +18,7 @@ class PPOTrainConfig:
   run_dir: str | None = None
   resume: str | None = None
   export_fail_fast: bool = False
-  evaluation_episodes: int = 10
+  evaluation_episodes: int = 20
   use_wandb: bool = False
   wandb_project: str = "double-pendulum"
   wandb_entity: str | None = None

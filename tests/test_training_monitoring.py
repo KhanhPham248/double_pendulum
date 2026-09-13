@@ -8,7 +8,11 @@ from double_pendulum.training.common import WandbSession
 from double_pendulum.training.monitoring import CheckpointMonitor
 
 
-def _report(success: float, hold: float) -> dict[str, object]:
+def _report(
+  success: float,
+  hold: float,
+  post_success_fraction: float | None = None,
+) -> dict[str, object]:
   return {
     "aggregate": {
       "success_rate": success,
@@ -16,12 +20,18 @@ def _report(success: float, hold: float) -> dict[str, object]:
       "upright_fraction": hold / 20.0,
       "episode_return": hold * 100.0,
       "mean_abs_torque_nm": 1.0,
+      "post_success_stable_fraction": post_success_fraction,
+      "post_success_escape_count": 0.0 if success else None,
+      "time_to_success_s": 5.0 if success else None,
+      "post_success_mean_angle_error_rad": 0.1 if success else None,
+      "post_success_mean_angular_velocity_rad_s": 0.2 if success else None,
+      "post_success_mean_abs_torque_nm": 0.3 if success else None,
     }
   }
 
 
 def test_checkpoint_monitor_keeps_best_export(monkeypatch, tmp_path: Path) -> None:
-  reports = iter((_report(1.0, 15.0), _report(0.0, 1.0)))
+  reports = iter((_report(1.0, 15.0, 0.8), _report(0.0, 1.0)))
 
   def fake_evaluate(*args, output_path: Path, **kwargs):
     report = next(reports)
@@ -53,6 +63,36 @@ def test_checkpoint_monitor_keeps_best_export(monkeypatch, tmp_path: Path) -> No
   )
 
 
+def test_checkpoint_monitor_prefers_post_success_stability(
+  monkeypatch, tmp_path: Path
+) -> None:
+  reports = iter((_report(1.0, 19.0, 0.7), _report(1.0, 15.0, 0.9)))
+
+  def fake_evaluate(*args, output_path: Path, **kwargs):
+    report = next(reports)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(report), encoding="utf-8")
+    return report
+
+  monkeypatch.setattr(
+    "double_pendulum.training.monitoring.evaluate_run",
+    fake_evaluate,
+  )
+  (tmp_path / "policy.onnx").write_bytes(b"first")
+  (tmp_path / "policy.yaml").write_text("first", encoding="utf-8")
+  checkpoint = tmp_path / "checkpoints" / "step.pt"
+  checkpoint.parent.mkdir()
+  checkpoint.write_bytes(b"checkpoint")
+  monitor = CheckpointMonitor(tmp_path, episodes=2)
+
+  monitor.evaluate(1, checkpoint)
+  (tmp_path / "policy.onnx").write_bytes(b"second")
+  (tmp_path / "policy.yaml").write_text("second", encoding="utf-8")
+  monitor.evaluate(2, checkpoint)
+
+  assert (tmp_path / "best" / "policy.onnx").read_bytes() == b"second"
+
+
 def test_wandb_session_can_be_disabled_without_initializing(tmp_path: Path) -> None:
   session = WandbSession(
     tmp_path,
@@ -71,4 +111,4 @@ def test_ppo_defaults_limit_late_training_updates() -> None:
   runner = make_ppo_runner_cfg(config)
   assert runner.algorithm.learning_rate == 3e-4
   assert runner.algorithm.schedule == "fixed"
-  assert config.evaluation_episodes == 10
+  assert config.evaluation_episodes == 20
