@@ -1,7 +1,7 @@
 task: combined
 algorithm: sac
-checkpoint: checkpoints/step_000000400384.pt
-policy_sha256: 872e69a0374fb08e15920ddba99fea32b29ec3ce73529f1b77c613e9e1201f34
+checkpoint: checkpoints/step_000002000384.pt
+policy_sha256: cb1c69504a72e3704786e912a605c90f85d613494acb2dfab8960a325423c36c
 contract:
   observation_names:
   - sin_q1
@@ -37,4 +37,4 @@ reward:
   capture_elbow_sigma_rad: 0.45
 format_version: 1
 policy_type: torque
-created_at_utc: '2026-09-12T17:28:25.240415+00:00'
+created_at_utc: '2026-09-12T18:58:51.114361+00:00'
