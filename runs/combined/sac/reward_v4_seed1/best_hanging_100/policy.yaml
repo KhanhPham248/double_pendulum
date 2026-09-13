@@ -1,0 +1,41 @@
+task: combined
+algorithm: sac
+checkpoint: checkpoints/step_000001100288.pt
+policy_sha256: 023e43c954d5e4eb7d1f814cd1f4f3907b5c76f90dc988ef6d555f9e2aeb3396
+contract:
+  observation_names:
+  - sin_q1
+  - cos_q1
+  - sin_q2
+  - cos_q2
+  - qdot1
+  - qdot2
+  action_names:
+  - base_torque
+  joint_names:
+  - base_joint
+  - elbow_joint
+  actuated_joint: base_joint
+  torque_limit_nm: 6.0
+  physics_timestep_s: 0.002
+  control_timestep_s: 0.02
+evaluation:
+  angle_threshold_rad: 0.21
+  velocity_threshold_rad_s: 1.0
+  success_hold_s: 5.0
+  default_duration_s: 20.0
+reward:
+  formula_version: 4
+  link_alignment_weight: 1.0
+  upright_capture_weight: 2.0
+  balancing_bonus_weight: 2.0
+  global_velocity_weight: -0.005
+  upright_velocity_weight: -0.1
+  torque_weight: -0.01
+  action_rate_weight: -0.02
+  capture_angle_sigma_rad: 0.5
+  capture_base_sigma_rad: 0.35
+  capture_elbow_sigma_rad: 0.45
+format_version: 1
+policy_type: torque
+created_at_utc: '2026-09-13T06:37:24.073752+00:00'

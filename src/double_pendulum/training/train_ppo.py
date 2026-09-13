@@ -10,18 +10,17 @@ from dataclasses import asdict
 import torch
 import yaml
 
-from mjlab.envs import ManagerBasedRlEnv
-from mjlab.rl import RslRlVecEnvWrapper
-from mjlab.utils.torch import configure_torch_backends
-
 from double_pendulum.algorithms.ppo import (
   DoublePendulumPpoRunner,
   PPOTrainConfig,
   make_ppo_runner_cfg,
 )
 from double_pendulum.tasks import get_task, list_tasks
+from mjlab.envs import ManagerBasedRlEnv
+from mjlab.rl import RslRlVecEnvWrapper
+from mjlab.utils.torch import configure_torch_backends
 
-from .common import prepare_run_dir
+from .common import WandbSession, prepare_run_dir
 
 
 def _dump_config(path, values) -> None:
@@ -46,23 +45,40 @@ def train(config: PPOTrainConfig):
     requested=config.run_dir,
     resume=config.resume,
   )
-  env = ManagerBasedRlEnv(cfg=task.make_env_cfg(config.num_envs), device=config.device)
-  wrapped = RslRlVecEnvWrapper(env, clip_actions=1.0)
   runner_cfg = make_ppo_runner_cfg(config)
-  _dump_config(run_dir / "train_config.yaml", asdict(config))
-  _dump_config(run_dir / "task_config.yaml", asdict(task.config))
-  _dump_config(run_dir / "ppo_config.yaml", asdict(runner_cfg))
-  runner = DoublePendulumPpoRunner(
-    wrapped,
-    asdict(runner_cfg),
-    str(run_dir),
-    config.device,
-    task_name=config.task,
-    evaluation_spec=task.evaluation,
-    reward_spec=task.config.reward,
-    export_fail_fast=config.export_fail_fast,
+  if config.resume is None:
+    _dump_config(run_dir / "train_config.yaml", asdict(config))
+    _dump_config(run_dir / "task_config.yaml", asdict(task.config))
+    _dump_config(run_dir / "ppo_config.yaml", asdict(runner_cfg))
+  wandb_session = WandbSession(
+    run_dir,
+    enabled=config.use_wandb,
+    project=config.wandb_project,
+    entity=config.wandb_entity,
+    name=config.wandb_run_name,
+    config={"train": asdict(config), "task": asdict(task.config)},
   )
+  if wandb_session.url is not None:
+    print(f"WANDB_RUN={wandb_session.url}", flush=True)
+  env = None
+  wrapped = None
   try:
+    env = ManagerBasedRlEnv(
+      cfg=task.make_env_cfg(config.num_envs),
+      device=config.device,
+    )
+    wrapped = RslRlVecEnvWrapper(env, clip_actions=1.0)
+    runner = DoublePendulumPpoRunner(
+      wrapped,
+      asdict(runner_cfg),
+      str(run_dir),
+      config.device,
+      task_name=config.task,
+      evaluation_spec=task.evaluation,
+      reward_spec=task.config.reward,
+      export_fail_fast=config.export_fail_fast,
+      evaluation_episodes=config.evaluation_episodes,
+    )
     if config.resume is not None:
       runner.load(config.resume, map_location=config.device)
     runner.learn(
@@ -70,7 +86,11 @@ def train(config: PPOTrainConfig):
       init_at_random_ep_len=True,
     )
   finally:
-    wrapped.close()
+    if wrapped is not None:
+      wrapped.close()
+    elif env is not None:
+      env.close()
+    wandb_session.finish()
   return run_dir
 
 
@@ -85,6 +105,11 @@ def parse_args(argv: list[str] | None = None) -> PPOTrainConfig:
   parser.add_argument("--run-dir")
   parser.add_argument("--resume")
   parser.add_argument("--export-fail-fast", action="store_true")
+  parser.add_argument("--evaluation-episodes", type=int, default=10)
+  parser.add_argument("--wandb", action="store_true", dest="use_wandb")
+  parser.add_argument("--wandb-project", default="double-pendulum")
+  parser.add_argument("--wandb-entity")
+  parser.add_argument("--wandb-run-name")
   return PPOTrainConfig(**vars(parser.parse_args(argv)))
 
 

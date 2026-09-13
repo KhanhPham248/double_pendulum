@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import importlib
 import importlib.metadata
-import sys
 
 
 def main() -> int:
@@ -21,12 +20,13 @@ def main() -> int:
     "tensorboard",
     "tyro",
     "mediapy",
+    "wandb",
   )
   missing: list[str] = []
   for module_name in required:
     try:
       module = importlib.import_module(module_name)
-    except Exception as error:  # Import errors should be reported, not hidden.
+    except Exception as error:  # noqa: BLE001 - report broken optional runtimes.
       missing.append(f"{module_name}: {error}")
     else:
       print(f"OK {module_name}={getattr(module, '__version__', 'installed')}")

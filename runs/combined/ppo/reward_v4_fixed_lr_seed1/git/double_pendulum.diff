@@ -1,0 +1,668 @@
+--- git commit ---
+6ebda07679a3881a1013c86f8c94f4f0a0aacbf9
+
+
+--- git status ---
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   TRAINING_GUIDE.md
+	modified:   pyproject.toml
+	modified:   scripts/preflight.py
+	modified:   src/double_pendulum/algorithms/ppo/config.py
+	modified:   src/double_pendulum/algorithms/ppo/runner.py
+	modified:   src/double_pendulum/algorithms/sac/config.py
+	modified:   src/double_pendulum/evaluation/evaluator.py
+	modified:   src/double_pendulum/training/common.py
+	modified:   src/double_pendulum/training/train_ppo.py
+	modified:   src/double_pendulum/training/train_sac.py
+	modified:   tests/test_sac.py
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	runs/combined/ppo/reward_v3_seed1/evaluation.json
+	runs/combined/ppo/reward_v3_seed1/evaluation_hanging.json
+	runs/combined/ppo/reward_v3_seed1/evaluation_upright.json
+	runs/combined/ppo/reward_v4_fixed_lr_seed1/
+	runs/combined/ppo/reward_v4_seed1/
+	runs/combined/sac/reward_v3_seed1/evaluation.json
+	runs/combined/sac/reward_v3_seed1/evaluation_hanging.json
+	runs/combined/sac/reward_v3_seed1/evaluation_upright.json
+	runs/combined/sac/reward_v4_seed1/
+	src/double_pendulum/training/monitoring.py
+	tests/test_training_monitoring.py
+
+no changes added to commit (use "git add" and/or "git commit -a") 
+
+
+--- git diff ---
+diff --git a/TRAINING_GUIDE.md b/TRAINING_GUIDE.md
+index f9b8c50..7505053 100644
+--- a/TRAINING_GUIDE.md
++++ b/TRAINING_GUIDE.md
+@@ -62,6 +62,12 @@ python scripts/preflight.py
+ pytest -q
+ ```
+ 
++Đăng nhập W&B một lần trên máy train nếu muốn đồng bộ dashboard:
++
++```bash
++wandb login
++```
++
+ Chỉ bắt đầu train GPU khi preflight kết thúc bằng:
+ 
+ ```text
+@@ -92,6 +98,10 @@ python scripts/train_sac.py \
+   --total-transitions 2000000 \
+   --batch-size 256 \
+   --utd-ratio 0.25 \
++  --evaluation-episodes 10 \
++  --wandb \
++  --wandb-project double-pendulum \
++  --wandb-run-name sac-v4-seed1 \
+   --export-fail-fast
+ ```
+ 
+@@ -122,6 +132,10 @@ python scripts/train_ppo.py \
+   --device cuda:0 \
+   --num-envs 64 \
+   --max-iterations 2000 \
++  --evaluation-episodes 10 \
++  --wandb \
++  --wandb-project double-pendulum \
++  --wandb-run-name ppo-v4-seed1 \
+   --export-fail-fast
+ ```
+ 
+@@ -130,10 +144,11 @@ của v3 (`q1 = pi`, `q2 = 0`) và thêm penalty vận tốc toàn cục để t
+ quay vòng tốc độ cao. Reward version và toàn bộ weight được lưu trong
+ `task_config.yaml` và `policy.yaml` của run mới.
+ 
+-### PPO reward-v4 validation run
++### PPO reward-v4 stability run
+ 
+-Để cô lập ảnh hưởng của reward, lần chạy đầu tiên phải giữ nguyên
+-hyperparameter PPO và chỉ sử dụng task/reward mới:
++Cấu hình mặc định mới dùng learning rate cố định `3e-4`. Cấu hình này tránh
++learning rate adaptive tăng đến `1e-2`, nguyên nhân đi kèm value-loss explosion
++và policy collapse trong run reward-v4 cũ:
+ 
+ ```bash
+ python scripts/train_ppo.py \
+@@ -142,8 +157,12 @@ python scripts/train_ppo.py \
+   --num-envs 512 \
+   --max-iterations 2000 \
+   --save-interval 50 \
++  --evaluation-episodes 10 \
+   --seed 1 \
+-  --run-dir runs/combined/ppo/reward_v4_seed1 \
++  --run-dir runs/combined/ppo/reward_v4_stable_seed1 \
++  --wandb \
++  --wandb-project double-pendulum \
++  --wandb-run-name ppo-v4-stable-seed1 \
+   --export-fail-fast
+ ```
+ 
+@@ -195,6 +214,13 @@ runs/<task>/<algorithm>/<timestamp>/
+ │   └── latest.pt
+ ├── policy.onnx
+ ├── policy.yaml
++├── best/
++│   ├── policy.onnx
++│   ├── policy.yaml
++│   ├── evaluation.json
++│   └── checkpoint.txt
++├── evaluations/
++│   └── step_XXXXXXXXXXXX.json
+ ├── metrics.jsonl hoặc TensorBoard logs
+ └── videos/
+ ```
+@@ -204,6 +230,11 @@ Checkpoint native được giữ để resume. Trong mỗi run chỉ có một
+ export và parity check thành công. Nếu export lỗi, checkpoint vẫn được giữ và
+ ONNX hợp lệ trước đó không bị thay thế.
+ 
++Mỗi lần lưu checkpoint, trainer chạy deterministic evaluation từ trạng thái
++`hanging`. Các metric `eval/hanging/*` được ghi vào TensorBoard và W&B. Thư mục
++`best/` chỉ cập nhật khi policy mới tốt hơn theo thứ tự: success rate, thời gian
++giữ lâu nhất, upright fraction, episode return và torque.
++
+ Theo dõi log bằng:
+ 
+ ```bash
+@@ -218,6 +249,19 @@ ssh -L 6006:localhost:6006 USER@TRAIN_MACHINE
+ 
+ Sau đó mở `http://localhost:6006`.
+ 
++Khi chạy với `--wandb`, log TensorBoard local vẫn được giữ và được đồng bộ lên
++W&B. Link của run được in ở dòng `WANDB_RUN=...`. Các biểu đồ quan trọng để
++nhận biết bão hòa hoặc collapse là:
++
++- `eval/hanging/success_rate` và `eval/hanging/longest_hold_s`;
++- `eval/hanging/action_saturation_fraction`;
++- PPO: `Loss/value`, `Policy/mean_std`, `Loss/learning_rate`;
++- SAC: `sac/critic_loss`, `sac/actor_grad_norm`, `sac/learning_rate`.
++
++Đừng chọn checkpoint chỉ dựa trên `train/stable_fraction`. Metric đó là snapshot
++của vector environment; `eval/hanging/success_rate` mới kiểm tra trọn vẹn quá
++trình swing-up bằng actor deterministic.
++
+ ## 7. Resume training
+ 
+ ### SAC
+diff --git a/pyproject.toml b/pyproject.toml
+index d90cb84..d0d5cb3 100644
+--- a/pyproject.toml
++++ b/pyproject.toml
+@@ -27,6 +27,7 @@ dependencies = [
+   "trimesh>=4.8.3",
+   "tyro>=1.0.1",
+   "viser>=1.0.24",
++  "wandb>=0.19",
+   "warp-lang>=1.12.0",
+ ]
+ 
+diff --git a/scripts/preflight.py b/scripts/preflight.py
+index b3e70ba..cde8c42 100644
+--- a/scripts/preflight.py
++++ b/scripts/preflight.py
+@@ -5,7 +5,6 @@ from __future__ import annotations
+ 
+ import importlib
+ import importlib.metadata
+-import sys
+ 
+ 
+ def main() -> int:
+@@ -21,12 +20,13 @@ def main() -> int:
+     "tensorboard",
+     "tyro",
+     "mediapy",
++    "wandb",
+   )
+   missing: list[str] = []
+   for module_name in required:
+     try:
+       module = importlib.import_module(module_name)
+-    except Exception as error:  # Import errors should be reported, not hidden.
++    except Exception as error:  # noqa: BLE001 - report broken optional runtimes.
+       missing.append(f"{module_name}: {error}")
+     else:
+       print(f"OK {module_name}={getattr(module, '__version__', 'installed')}")
+diff --git a/src/double_pendulum/algorithms/ppo/config.py b/src/double_pendulum/algorithms/ppo/config.py
+index 59cd500..fd84fc5 100644
+--- a/src/double_pendulum/algorithms/ppo/config.py
++++ b/src/double_pendulum/algorithms/ppo/config.py
+@@ -18,10 +18,19 @@ class PPOTrainConfig:
+   run_dir: str | None = None
+   resume: str | None = None
+   export_fail_fast: bool = False
++  evaluation_episodes: int = 10
++  use_wandb: bool = False
++  wandb_project: str = "double-pendulum"
++  wandb_entity: str | None = None
++  wandb_run_name: str | None = None
+ 
+   def __post_init__(self) -> None:
+     if min(self.num_envs, self.max_iterations, self.save_interval) <= 0:
+       raise ValueError("environment, iteration and save counts must be positive")
++    if self.evaluation_episodes < 0:
++      raise ValueError("evaluation episodes cannot be negative")
++    if self.use_wandb and not self.wandb_project:
++      raise ValueError("W&B project cannot be empty")
+     if self.run_dir is not None and self.resume is not None:
+       raise ValueError("run_dir and resume cannot be used together")
+ 
+@@ -51,8 +60,8 @@ def make_ppo_runner_cfg(config: PPOTrainConfig) -> RslRlOnPolicyRunnerCfg:
+       entropy_coef=0.005,
+       num_learning_epochs=5,
+       num_mini_batches=4,
+-      learning_rate=1e-3,
+-      schedule="adaptive",
++      learning_rate=3e-4,
++      schedule="fixed",
+       gamma=0.99,
+       lam=0.95,
+       desired_kl=0.01,
+@@ -62,7 +71,9 @@ def make_ppo_runner_cfg(config: PPOTrainConfig) -> RslRlOnPolicyRunnerCfg:
+     max_iterations=config.max_iterations,
+     save_interval=config.save_interval,
+     experiment_name=f"double_pendulum_{config.task}",
++    run_name=config.wandb_run_name or "",
+     logger="tensorboard",
++    wandb_project=config.wandb_project,
+     upload_model=False,
+     clip_actions=1.0,
+   )
+diff --git a/src/double_pendulum/algorithms/ppo/runner.py b/src/double_pendulum/algorithms/ppo/runner.py
+index 6996b69..35e73af 100644
+--- a/src/double_pendulum/algorithms/ppo/runner.py
++++ b/src/double_pendulum/algorithms/ppo/runner.py
+@@ -8,8 +8,6 @@ from pathlib import Path
+ import numpy as np
+ import torch
+ 
+-from mjlab.rl import MjlabOnPolicyRunner
+-
+ from double_pendulum.common import (
+   DEFAULT_CONTRACT,
+   CombinedRewardSpec,
+@@ -18,6 +16,8 @@ from double_pendulum.common import (
+ from double_pendulum.export.checkpoints import update_latest_checkpoint
+ from double_pendulum.export.manifest import PolicyManifest, write_manifest
+ from double_pendulum.export.validation import export_atomically, validate_onnx
++from double_pendulum.training.monitoring import CheckpointMonitor
++from mjlab.rl import MjlabOnPolicyRunner
+ 
+ 
+ class DoublePendulumPpoRunner(MjlabOnPolicyRunner):
+@@ -28,6 +28,7 @@ class DoublePendulumPpoRunner(MjlabOnPolicyRunner):
+     evaluation_spec: EvaluationSpec,
+     reward_spec: CombinedRewardSpec,
+     export_fail_fast: bool = False,
++    evaluation_episodes: int = 10,
+     **kwargs,
+   ) -> None:
+     self.task_name = task_name
+@@ -36,6 +37,10 @@ class DoublePendulumPpoRunner(MjlabOnPolicyRunner):
+     self.export_fail_fast = export_fail_fast
+     self._last_saved_iteration = -1
+     super().__init__(*args, **kwargs)
++    self.checkpoint_monitor = CheckpointMonitor(
++      Path(self.logger.log_dir),
++      episodes=evaluation_episodes,
++    )
+ 
+   def load(
+     self,
+@@ -87,6 +92,24 @@ class DoublePendulumPpoRunner(MjlabOnPolicyRunner):
+       print(f"[WARN] PPO ONNX export failed; previous policy kept: {error}")
+       if self.export_fail_fast:
+         raise
++    else:
++      try:
++        metrics = self.checkpoint_monitor.evaluate(
++          self.current_learning_iteration,
++          checkpoint,
++        )
++      except Exception as error:  # noqa: BLE001 - monitoring must not stop training.
++        print(f"[WARN] PPO checkpoint evaluation failed: {error}", flush=True)
++      else:
++        if self.logger.writer is not None:
++          for name, value in metrics.items():
++            self.logger.writer.add_scalar(name, value, self.current_learning_iteration)
++        if metrics:
++          success = metrics["eval/hanging/success_rate"]
++          print(
++            f"PPO_CHECKPOINT_EVALUATED success_rate={success:.3f}",
++            flush=True,
++          )
+ 
+   def _export_latest(self, run_dir: Path, checkpoint: Path) -> None:
+     module = self.alg.get_policy().as_onnx(verbose=False).cpu().eval()
+diff --git a/src/double_pendulum/algorithms/sac/config.py b/src/double_pendulum/algorithms/sac/config.py
+index e17d4fc..a48fdf5 100644
+--- a/src/double_pendulum/algorithms/sac/config.py
++++ b/src/double_pendulum/algorithms/sac/config.py
+@@ -58,6 +58,11 @@ class SACTrainConfig:
+   run_dir: str | None = None
+   resume: str | None = None
+   export_fail_fast: bool = False
++  evaluation_episodes: int = 10
++  use_wandb: bool = False
++  wandb_project: str = "double-pendulum"
++  wandb_entity: str | None = None
++  wandb_run_name: str | None = None
+   agent: SACConfig = field(default_factory=SACConfig)
+ 
+   def __post_init__(self) -> None:
+@@ -71,5 +76,9 @@ class SACTrainConfig:
+       raise ValueError("utd_ratio must be positive")
+     if min(self.checkpoint_interval, self.log_interval) <= 0:
+       raise ValueError("checkpoint and log intervals must be positive")
++    if self.evaluation_episodes < 0:
++      raise ValueError("evaluation episodes cannot be negative")
++    if self.use_wandb and not self.wandb_project:
++      raise ValueError("W&B project cannot be empty")
+     if self.run_dir is not None and self.resume is not None:
+       raise ValueError("run_dir and resume cannot be used together")
+diff --git a/src/double_pendulum/evaluation/evaluator.py b/src/double_pendulum/evaluation/evaluator.py
+index b56c378..484f67f 100644
+--- a/src/double_pendulum/evaluation/evaluator.py
++++ b/src/double_pendulum/evaluation/evaluator.py
+@@ -35,6 +35,8 @@ def evaluate_run(
+   run_dir: Path,
+   model_path: Path,
+   config: EvaluationConfig,
++  *,
++  output_path: Path | None = None,
+ ) -> dict[str, object]:
+   policy = OnnxTorquePolicy(run_dir)
+   contract = policy.manifest.contract
+@@ -85,7 +87,8 @@ def evaluate_run(
+     "aggregate": aggregate,
+     "episodes": episodes,
+   }
+-  output = Path(run_dir) / "evaluation.json"
++  output = output_path or Path(run_dir) / "evaluation.json"
++  output.parent.mkdir(parents=True, exist_ok=True)
+   with output.open("w", encoding="utf-8") as destination:
+     json.dump(report, destination, indent=2, sort_keys=True)
+   return report
+diff --git a/src/double_pendulum/training/common.py b/src/double_pendulum/training/common.py
+index dd3906d..ec9c5e9 100644
+--- a/src/double_pendulum/training/common.py
++++ b/src/double_pendulum/training/common.py
+@@ -4,8 +4,11 @@ from __future__ import annotations
+ 
+ import json
+ import random
++import secrets
+ from datetime import datetime
+ from pathlib import Path
++from typing import Any
++
+ import torch
+ 
+ 
+@@ -28,6 +31,57 @@ class MetricsLogger:
+     self._tensorboard.close()
+ 
+ 
++class WandbSession:
++  """Optionally mirror local TensorBoard metrics to one resumable W&B run."""
++
++  def __init__(
++    self,
++    run_dir: Path,
++    *,
++    enabled: bool,
++    project: str,
++    entity: str | None,
++    name: str | None,
++    config: dict[str, Any],
++  ) -> None:
++    self._wandb = None
++    self._run = None
++    if not enabled:
++      return
++    try:
++      import wandb
++    except ImportError as error:
++      raise RuntimeError(
++        "W&B logging requires the 'wandb' package; reinstall the project"
++      ) from error
++
++    identifier_path = run_dir / ".wandb_run_id"
++    if identifier_path.exists():
++      run_id = identifier_path.read_text(encoding="utf-8").strip()
++    else:
++      run_id = secrets.token_hex(4)
++      identifier_path.write_text(run_id + "\n", encoding="utf-8")
++    self._wandb = wandb
++    self._run = wandb.init(
++      project=project,
++      entity=entity,
++      name=name or run_dir.name,
++      id=run_id,
++      resume="allow",
++      dir=str(run_dir),
++      config=config,
++      sync_tensorboard=True,
++    )
++
++  @property
++  def url(self) -> str | None:
++    return None if self._run is None else self._run.url
++
++  def finish(self) -> None:
++    if self._wandb is not None and self._run is not None:
++      self._wandb.finish()
++
++
+ def prepare_run_dir(
+   *,
+   task: str,
+diff --git a/src/double_pendulum/training/train_ppo.py b/src/double_pendulum/training/train_ppo.py
+index e9b38c9..c515dc5 100644
+--- a/src/double_pendulum/training/train_ppo.py
++++ b/src/double_pendulum/training/train_ppo.py
+@@ -10,18 +10,17 @@ from dataclasses import asdict
+ import torch
+ import yaml
+ 
+-from mjlab.envs import ManagerBasedRlEnv
+-from mjlab.rl import RslRlVecEnvWrapper
+-from mjlab.utils.torch import configure_torch_backends
+-
+ from double_pendulum.algorithms.ppo import (
+   DoublePendulumPpoRunner,
+   PPOTrainConfig,
+   make_ppo_runner_cfg,
+ )
+ from double_pendulum.tasks import get_task, list_tasks
++from mjlab.envs import ManagerBasedRlEnv
++from mjlab.rl import RslRlVecEnvWrapper
++from mjlab.utils.torch import configure_torch_backends
+ 
+-from .common import prepare_run_dir
++from .common import WandbSession, prepare_run_dir
+ 
+ 
+ def _dump_config(path, values) -> None:
+@@ -46,23 +45,39 @@ def train(config: PPOTrainConfig):
+     requested=config.run_dir,
+     resume=config.resume,
+   )
+-  env = ManagerBasedRlEnv(cfg=task.make_env_cfg(config.num_envs), device=config.device)
+-  wrapped = RslRlVecEnvWrapper(env, clip_actions=1.0)
+   runner_cfg = make_ppo_runner_cfg(config)
+   _dump_config(run_dir / "train_config.yaml", asdict(config))
+   _dump_config(run_dir / "task_config.yaml", asdict(task.config))
+   _dump_config(run_dir / "ppo_config.yaml", asdict(runner_cfg))
+-  runner = DoublePendulumPpoRunner(
+-    wrapped,
+-    asdict(runner_cfg),
+-    str(run_dir),
+-    config.device,
+-    task_name=config.task,
+-    evaluation_spec=task.evaluation,
+-    reward_spec=task.config.reward,
+-    export_fail_fast=config.export_fail_fast,
++  wandb_session = WandbSession(
++    run_dir,
++    enabled=config.use_wandb,
++    project=config.wandb_project,
++    entity=config.wandb_entity,
++    name=config.wandb_run_name,
++    config={"train": asdict(config), "task": asdict(task.config)},
+   )
++  if wandb_session.url is not None:
++    print(f"WANDB_RUN={wandb_session.url}", flush=True)
++  env = None
++  wrapped = None
+   try:
++    env = ManagerBasedRlEnv(
++      cfg=task.make_env_cfg(config.num_envs),
++      device=config.device,
++    )
++    wrapped = RslRlVecEnvWrapper(env, clip_actions=1.0)
++    runner = DoublePendulumPpoRunner(
++      wrapped,
++      asdict(runner_cfg),
++      str(run_dir),
++      config.device,
++      task_name=config.task,
++      evaluation_spec=task.evaluation,
++      reward_spec=task.config.reward,
++      export_fail_fast=config.export_fail_fast,
++      evaluation_episodes=config.evaluation_episodes,
++    )
+     if config.resume is not None:
+       runner.load(config.resume, map_location=config.device)
+     runner.learn(
+@@ -70,7 +85,11 @@ def train(config: PPOTrainConfig):
+       init_at_random_ep_len=True,
+     )
+   finally:
+-    wrapped.close()
++    if wrapped is not None:
++      wrapped.close()
++    elif env is not None:
++      env.close()
++    wandb_session.finish()
+   return run_dir
+ 
+ 
+@@ -85,6 +104,11 @@ def parse_args(argv: list[str] | None = None) -> PPOTrainConfig:
+   parser.add_argument("--run-dir")
+   parser.add_argument("--resume")
+   parser.add_argument("--export-fail-fast", action="store_true")
++  parser.add_argument("--evaluation-episodes", type=int, default=10)
++  parser.add_argument("--wandb", action="store_true", dest="use_wandb")
++  parser.add_argument("--wandb-project", default="double-pendulum")
++  parser.add_argument("--wandb-entity")
++  parser.add_argument("--wandb-run-name")
+   return PPOTrainConfig(**vars(parser.parse_args(argv)))
+ 
+ 
+diff --git a/src/double_pendulum/training/train_sac.py b/src/double_pendulum/training/train_sac.py
+index f1cb3b9..155ffa5 100644
+--- a/src/double_pendulum/training/train_sac.py
++++ b/src/double_pendulum/training/train_sac.py
+@@ -12,8 +12,6 @@ from pathlib import Path
+ import torch
+ import yaml
+ 
+-from mjlab.envs import ManagerBasedRlEnv
+-
+ from double_pendulum.algorithms.sac import ReplayBuffer, SACAgent, UpdateBudget
+ from double_pendulum.algorithms.sac.config import SACTrainConfig
+ from double_pendulum.common import DEFAULT_CONTRACT
+@@ -24,13 +22,16 @@ from double_pendulum.export.checkpoints import (
+ from double_pendulum.export.sac_exporter import export_sac_policy
+ from double_pendulum.tasks import get_task, list_tasks
+ from double_pendulum.tasks.combined import mdp
++from mjlab.envs import ManagerBasedRlEnv
+ 
+ from .common import (
+   MetricsLogger,
++  WandbSession,
+   capture_rng_state,
+   prepare_run_dir,
+   restore_rng_state,
+ )
++from .monitoring import CheckpointMonitor
+ 
+ CHECKPOINT_FORMAT = "double_pendulum_sac_v3"
+ 
+@@ -60,6 +61,8 @@ def _save(
+   update_budget: UpdateBudget,
+   evaluation,
+   reward,
++  logger: MetricsLogger,
++  monitor: CheckpointMonitor,
+ ) -> Path:
+   checkpoint = run_dir / "checkpoints" / f"step_{transitions:012d}.pt"
+   state = {
+@@ -90,6 +93,18 @@ def _save(
+       f"abs_error={parity.max_abs_error:.3e} rel_error={parity.max_rel_error:.3e}",
+       flush=True,
+     )
++    try:
++      metrics = monitor.evaluate(transitions, checkpoint)
++    except Exception as error:  # noqa: BLE001 - monitoring must not stop training.
++      print(f"CHECKPOINT_EVAL_FAILED checkpoint={checkpoint}: {error}", flush=True)
++    else:
++      if metrics:
++        logger.write(transitions, metrics)
++        success = metrics["eval/hanging/success_rate"]
++        print(
++          f"SAC_CHECKPOINT_EVALUATED success_rate={success:.3f}",
++          flush=True,
++        )
+   except Exception as error:
+     print(f"ONNX_EXPORT_FAILED checkpoint={checkpoint}: {error}", flush=True)
+     if config.export_fail_fast:
+@@ -115,10 +130,26 @@ def train(config: SACTrainConfig) -> Path:
+   if config.resume is None:
+     _dump_config(run_dir / "train_config.yaml", asdict(config))
+     _dump_config(run_dir / "task_config.yaml", asdict(task.config))
+-  logger = MetricsLogger(run_dir)
+-  env = ManagerBasedRlEnv(cfg=task.make_env_cfg(config.num_envs), device=config.device)
+-  started = time.monotonic()
++  wandb_session = WandbSession(
++    run_dir,
++    enabled=config.use_wandb,
++    project=config.wandb_project,
++    entity=config.wandb_entity,
++    name=config.wandb_run_name,
++    config={"train": asdict(config), "task": asdict(task.config)},
++  )
++  if wandb_session.url is not None:
++    print(f"WANDB_RUN={wandb_session.url}", flush=True)
++  logger = None
++  env = None
+   try:
++    logger = MetricsLogger(run_dir)
++    monitor = CheckpointMonitor(run_dir, episodes=config.evaluation_episodes)
++    env = ManagerBasedRlEnv(
++      cfg=task.make_env_cfg(config.num_envs),
++      device=config.device,
++    )
++    started = time.monotonic()
+     observations, _ = env.reset(seed=config.seed)
+     actor_obs = _actor_observation(observations)
+     action_dim = env.action_manager.total_action_dim
+@@ -253,6 +284,8 @@ def train(config: SACTrainConfig) -> Path:
+           update_budget=update_budget,
+           evaluation=task.evaluation,
+           reward=task.config.reward,
++          logger=logger,
++          monitor=monitor,
+         )
+         last_saved_at = transitions
+         while next_checkpoint <= transitions:
+@@ -269,10 +302,15 @@ def train(config: SACTrainConfig) -> Path:
+         update_budget=update_budget,
+         evaluation=task.evaluation,
+         reward=task.config.reward,
++        logger=logger,
++        monitor=monitor,
+       )
+   finally:
+-    logger.close()
+-    env.close()
++    if logger is not None:
++      logger.close()
++    if env is not None:
++      env.close()
++    wandb_session.finish()
+   return run_dir
+ 
+ 
+@@ -292,6 +330,11 @@ def parse_args(argv: list[str] | None = None) -> SACTrainConfig:
+   parser.add_argument("--run-dir")
+   parser.add_argument("--resume")
+   parser.add_argument("--export-fail-fast", action="store_true")
++  parser.add_argument("--evaluation-episodes", type=int, default=10)
++  parser.add_argument("--wandb", action="store_true", dest="use_wandb")
++  parser.add_argument("--wandb-project", default="double-pendulum")
++  parser.add_argument("--wandb-entity")
++  parser.add_argument("--wandb-run-name")
+   return SACTrainConfig(**vars(parser.parse_args(argv)))
+ 
+ 
+diff --git a/tests/test_sac.py b/tests/test_sac.py
+index ad72367..575baa2 100644
+--- a/tests/test_sac.py
++++ b/tests/test_sac.py
+@@ -147,3 +147,5 @@ def test_sac_training_defaults_use_transition_based_updates() -> None:
+   assert config.batch_size == 256
+   assert config.utd_ratio == 0.25
+   assert config.agent.learning_rate_schedule == "constant"
++  assert config.agent.learning_rate_decay_steps == 100_000
++  assert config.evaluation_episodes == 10

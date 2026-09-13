@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 import random
+import secrets
 from datetime import datetime
 from pathlib import Path
+from typing import Any
+
 import torch
 
 
@@ -26,6 +29,57 @@ class MetricsLogger:
   def close(self) -> None:
     self._jsonl.close()
     self._tensorboard.close()
+
+
+class WandbSession:
+  """Optionally mirror local TensorBoard metrics to one resumable W&B run."""
+
+  def __init__(
+    self,
+    run_dir: Path,
+    *,
+    enabled: bool,
+    project: str,
+    entity: str | None,
+    name: str | None,
+    config: dict[str, Any],
+  ) -> None:
+    self._wandb = None
+    self._run = None
+    if not enabled:
+      return
+    try:
+      import wandb
+    except ImportError as error:
+      raise RuntimeError(
+        "W&B logging requires the 'wandb' package; reinstall the project"
+      ) from error
+
+    identifier_path = run_dir / ".wandb_run_id"
+    if identifier_path.exists():
+      run_id = identifier_path.read_text(encoding="utf-8").strip()
+    else:
+      run_id = secrets.token_hex(4)
+      identifier_path.write_text(run_id + "\n", encoding="utf-8")
+    self._wandb = wandb
+    self._run = wandb.init(
+      project=project,
+      entity=entity,
+      name=name or run_dir.name,
+      id=run_id,
+      resume="allow",
+      dir=str(run_dir),
+      config=config,
+      sync_tensorboard=True,
+    )
+
+  @property
+  def url(self) -> str | None:
+    return None if self._run is None else self._run.url
+
+  def finish(self) -> None:
+    if self._wandb is not None and self._run is not None:
+      self._wandb.finish()
 
 
 def prepare_run_dir(

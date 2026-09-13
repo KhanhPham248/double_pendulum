@@ -1,0 +1,14 @@
+task: combined
+device: cuda:0
+num_envs: 512
+max_iterations: 2000
+save_interval: 50
+seed: 1
+run_dir: runs/combined/ppo/reward_v4_fixed_lr_seed1
+resume: null
+export_fail_fast: true
+evaluation_episodes: 10
+use_wandb: true
+wandb_project: double-pendulum
+wandb_entity: null
+wandb_run_name: ppo-v4-fixed-lr-seed1

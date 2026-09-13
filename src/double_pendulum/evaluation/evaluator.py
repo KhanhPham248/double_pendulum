@@ -35,6 +35,8 @@ def evaluate_run(
   run_dir: Path,
   model_path: Path,
   config: EvaluationConfig,
+  *,
+  output_path: Path | None = None,
 ) -> dict[str, object]:
   policy = OnnxTorquePolicy(run_dir)
   contract = policy.manifest.contract
@@ -85,7 +87,8 @@ def evaluate_run(
     "aggregate": aggregate,
     "episodes": episodes,
   }
-  output = Path(run_dir) / "evaluation.json"
+  output = output_path or Path(run_dir) / "evaluation.json"
+  output.parent.mkdir(parents=True, exist_ok=True)
   with output.open("w", encoding="utf-8") as destination:
     json.dump(report, destination, indent=2, sort_keys=True)
   return report

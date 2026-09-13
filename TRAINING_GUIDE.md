@@ -62,6 +62,12 @@ python scripts/preflight.py
 pytest -q
 ```
 
+Đăng nhập W&B một lần trên máy train nếu muốn đồng bộ dashboard:
+
+```bash
+wandb login
+```
+
 Chỉ bắt đầu train GPU khi preflight kết thúc bằng:
 
 ```text
@@ -92,6 +98,10 @@ python scripts/train_sac.py \
   --total-transitions 2000000 \
   --batch-size 256 \
   --utd-ratio 0.25 \
+  --evaluation-episodes 10 \
+  --wandb \
+  --wandb-project double-pendulum \
+  --wandb-run-name sac-v4-seed1 \
   --export-fail-fast
 ```
 
@@ -122,6 +132,10 @@ python scripts/train_ppo.py \
   --device cuda:0 \
   --num-envs 64 \
   --max-iterations 2000 \
+  --evaluation-episodes 10 \
+  --wandb \
+  --wandb-project double-pendulum \
+  --wandb-run-name ppo-v4-seed1 \
   --export-fail-fast
 ```
 
@@ -130,10 +144,17 @@ của v3 (`q1 = pi`, `q2 = 0`) và thêm penalty vận tốc toàn cục để t
 quay vòng tốc độ cao. Reward version và toàn bộ weight được lưu trong
 `task_config.yaml` và `policy.yaml` của run mới.
 
-### PPO reward-v4 validation run
+### PPO reward-v4 stability run
 
-Để cô lập ảnh hưởng của reward, lần chạy đầu tiên phải giữ nguyên
-hyperparameter PPO và chỉ sử dụng task/reward mới:
+Cấu hình mặc định mới dùng learning rate cố định `3e-4`. Cấu hình này tránh
+learning rate adaptive tăng đến `1e-2`, nguyên nhân đi kèm value-loss explosion
+và policy collapse trong run reward-v4 cũ:
+
+RSL-RL kiểm tra actor KL sau từng mini-batch và nhân hoặc chia learning rate
+cho `1.5`. Với 5 epoch và 4 mini-batch, scheduler có thể đổi learning rate 20
+lần trong một iteration. Actor và critic dùng chung optimizer, nên learning
+rate của critic cũng tăng dù scheduler chỉ đo actor KL. Khi actor gần hội tụ,
+KL thấp làm learning rate tăng sai thời điểm và critic mất ổn định.
 
 ```bash
 python scripts/train_ppo.py \
@@ -142,8 +163,12 @@ python scripts/train_ppo.py \
   --num-envs 512 \
   --max-iterations 2000 \
   --save-interval 50 \
+  --evaluation-episodes 10 \
   --seed 1 \
-  --run-dir runs/combined/ppo/reward_v4_seed1 \
+  --run-dir runs/combined/ppo/reward_v4_stable_seed1 \
+  --wandb \
+  --wandb-project double-pendulum \
+  --wandb-run-name ppo-v4-stable-seed1 \
   --export-fail-fast
 ```
 
@@ -195,6 +220,13 @@ runs/<task>/<algorithm>/<timestamp>/
 │   └── latest.pt
 ├── policy.onnx
 ├── policy.yaml
+├── best/
+│   ├── policy.onnx
+│   ├── policy.yaml
+│   ├── evaluation.json
+│   └── checkpoint.txt
+├── evaluations/
+│   └── step_XXXXXXXXXXXX.json
 ├── metrics.jsonl hoặc TensorBoard logs
 └── videos/
 ```
@@ -203,6 +235,11 @@ Checkpoint native được giữ để resume. Trong mỗi run chỉ có một
 `policy.onnx`; file này được cập nhật bằng actor deterministic mới nhất sau khi
 export và parity check thành công. Nếu export lỗi, checkpoint vẫn được giữ và
 ONNX hợp lệ trước đó không bị thay thế.
+
+Mỗi lần lưu checkpoint, trainer chạy deterministic evaluation từ trạng thái
+`hanging`. Các metric `eval/hanging/*` được ghi vào TensorBoard và W&B. Thư mục
+`best/` chỉ cập nhật khi policy mới tốt hơn theo thứ tự: success rate, thời gian
+giữ lâu nhất, upright fraction, episode return và torque.
 
 Theo dõi log bằng:
 
@@ -217,6 +254,19 @@ ssh -L 6006:localhost:6006 USER@TRAIN_MACHINE
 ```
 
 Sau đó mở `http://localhost:6006`.
+
+Khi chạy với `--wandb`, log TensorBoard local vẫn được giữ và được đồng bộ lên
+W&B. Link của run được in ở dòng `WANDB_RUN=...`. Các biểu đồ quan trọng để
+nhận biết bão hòa hoặc collapse là:
+
+- `eval/hanging/success_rate` và `eval/hanging/longest_hold_s`;
+- `eval/hanging/action_saturation_fraction`;
+- PPO: `Loss/value`, `Policy/mean_std`, `Loss/learning_rate`;
+- SAC: `sac/critic_loss`, `sac/actor_grad_norm`, `sac/learning_rate`.
+
+Đừng chọn checkpoint chỉ dựa trên `train/stable_fraction`. Metric đó là snapshot
+của vector environment; `eval/hanging/success_rate` mới kiểm tra trọn vẹn quá
+trình swing-up bằng actor deterministic.
 
 ## 7. Resume training
 

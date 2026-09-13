@@ -27,6 +27,7 @@ dependencies = [
   "trimesh>=4.8.3",
   "tyro>=1.0.1",
   "viser>=1.0.24",
+  "wandb>=0.19",
   "warp-lang>=1.12.0",
 ]
 

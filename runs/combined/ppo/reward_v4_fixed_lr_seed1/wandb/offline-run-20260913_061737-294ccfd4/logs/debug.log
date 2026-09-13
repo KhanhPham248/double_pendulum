@@ -1,0 +1,24 @@
+2026-09-13 06:17:37,687 INFO    MainThread:436499 [wandb_setup.py:_flush():81] Current SDK version is 0.30.0
+2026-09-13 06:17:37,688 INFO    MainThread:436499 [wandb_setup.py:_flush():81] Configure stats pid to 436499
+2026-09-13 06:17:37,688 INFO    MainThread:436499 [wandb_setup.py:_flush():81] Loading settings from environment variables
+2026-09-13 06:17:37,688 INFO    MainThread:436499 [wandb_init.py:setup_run_log_directory():739] Logging user logs to /teamspace/studios/this_studio/double_pendulum/runs/combined/ppo/reward_v4_fixed_lr_seed1/wandb/offline-run-20260913_061737-294ccfd4/logs/debug.log
+2026-09-13 06:17:37,691 INFO    MainThread:436499 [wandb_init.py:setup_run_log_directory():740] Logging internal logs to /teamspace/studios/this_studio/double_pendulum/runs/combined/ppo/reward_v4_fixed_lr_seed1/wandb/offline-run-20260913_061737-294ccfd4/logs/debug-internal.log
+2026-09-13 06:17:37,782 INFO    MainThread:436499 [wandb_init.py:init():783] calling init triggers
+2026-09-13 06:17:37,783 INFO    MainThread:436499 [wandb_init.py:init():788] wandb.init called with sweep_config: {}
+config: {'train': {'task': 'combined', 'device': 'cuda:0', 'num_envs': 512, 'max_iterations': 2000, 'save_interval': 50, 'seed': 1, 'run_dir': 'runs/combined/ppo/reward_v4_fixed_lr_seed1', 'resume': None, 'export_fail_fast': True, 'evaluation_episodes': 10, 'use_wandb': True, 'wandb_project': 'double-pendulum', 'wandb_entity': None, 'wandb_run_name': 'ppo-v4-fixed-lr-seed1'}, 'task': {'episode_length_s': 20.0, 'success_hold_s': 5.0, 'stable_angle_rad': 0.21, 'stable_velocity_rad_s': 1.0, 'near_upright_probability': 0.2, 'hanging_probability': 0.35, 'near_upright_angle_rad': 0.2, 'hanging_angle_rad': 0.25, 'random_velocity_rad_s': 1.0, 'reward': {'formula_version': 4, 'link_alignment_weight': 1.0, 'upright_capture_weight': 2.0, 'balancing_bonus_weight': 2.0, 'global_velocity_weight': -0.005, 'upright_velocity_weight': -0.1, 'torque_weight': -0.01, 'action_rate_weight': -0.02, 'capture_angle_sigma_rad': 0.5, 'capture_base_sigma_rad': 0.35, 'capture_elbow_sigma_rad': 0.45}}, '_wandb': {}}
+2026-09-13 06:17:37,783 INFO    MainThread:436499 [wandb_init.py:init():831] starting backend
+2026-09-13 06:17:37,989 INFO    MainThread:436499 [wandb_init.py:init():846] sending inform_init request
+2026-09-13 06:17:38,006 INFO    MainThread:436499 [wandb_init.py:init():851] backend started and connected
+2026-09-13 06:17:38,008 INFO    MainThread:436499 [wandb_init.py:init():921] updated telemetry
+2026-09-13 06:17:38,033 INFO    MainThread:436499 [wandb_init.py:init():944] communicating run to backend with 90.0 second timeout
+2026-09-13 06:17:38,044 INFO    MainThread:436499 [wandb_init.py:init():981] starting run threads in backend
+2026-09-13 06:17:38,224 INFO    MainThread:436499 [wandb_run.py:_console_start():2531] atexit reg
+2026-09-13 06:17:38,224 INFO    MainThread:436499 [wandb_run.py:_redirect():2381] redirect: wrap_raw
+2026-09-13 06:17:38,225 INFO    MainThread:436499 [wandb_run.py:_redirect():2450] Wrapping output streams.
+2026-09-13 06:17:38,225 INFO    MainThread:436499 [wandb_run.py:_redirect():2473] Redirects installed.
+2026-09-13 06:17:38,227 INFO    MainThread:436499 [wandb_init.py:init():1019] run started, returning control to user process
+2026-09-13 06:17:39,488 INFO    MainThread:436499 [wandb_run.py:_tensorboard_callback():1511] tensorboard callback: /teamspace/studios/this_studio/double_pendulum/runs/combined/ppo/reward_v4_fixed_lr_seed1, True
+2026-09-13 06:20:43,237 INFO    MainThread:436499 [wandb_run.py:_finish():2303] finishing run double-pendulum/294ccfd4
+2026-09-13 06:20:43,241 INFO    MainThread:436499 [wandb_run.py:_atexit_cleanup():2498] got exitcode: 0
+2026-09-13 06:20:43,241 INFO    MainThread:436499 [wandb_run.py:_restore():2480] restore
+2026-09-13 06:20:43,241 INFO    MainThread:436499 [wandb_run.py:_restore():2486] restore done

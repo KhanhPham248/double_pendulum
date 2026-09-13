@@ -58,6 +58,11 @@ class SACTrainConfig:
   run_dir: str | None = None
   resume: str | None = None
   export_fail_fast: bool = False
+  evaluation_episodes: int = 10
+  use_wandb: bool = False
+  wandb_project: str = "double-pendulum"
+  wandb_entity: str | None = None
+  wandb_run_name: str | None = None
   agent: SACConfig = field(default_factory=SACConfig)
 
   def __post_init__(self) -> None:
@@ -71,5 +76,9 @@ class SACTrainConfig:
       raise ValueError("utd_ratio must be positive")
     if min(self.checkpoint_interval, self.log_interval) <= 0:
       raise ValueError("checkpoint and log intervals must be positive")
+    if self.evaluation_episodes < 0:
+      raise ValueError("evaluation episodes cannot be negative")
+    if self.use_wandb and not self.wandb_project:
+      raise ValueError("W&B project cannot be empty")
     if self.run_dir is not None and self.resume is not None:
       raise ValueError("run_dir and resume cannot be used together")

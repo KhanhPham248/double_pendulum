@@ -8,8 +8,6 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from mjlab.rl import MjlabOnPolicyRunner
-
 from double_pendulum.common import (
   DEFAULT_CONTRACT,
   CombinedRewardSpec,
@@ -18,6 +16,8 @@ from double_pendulum.common import (
 from double_pendulum.export.checkpoints import update_latest_checkpoint
 from double_pendulum.export.manifest import PolicyManifest, write_manifest
 from double_pendulum.export.validation import export_atomically, validate_onnx
+from double_pendulum.training.monitoring import CheckpointMonitor
+from mjlab.rl import MjlabOnPolicyRunner
 
 
 class DoublePendulumPpoRunner(MjlabOnPolicyRunner):
@@ -28,6 +28,7 @@ class DoublePendulumPpoRunner(MjlabOnPolicyRunner):
     evaluation_spec: EvaluationSpec,
     reward_spec: CombinedRewardSpec,
     export_fail_fast: bool = False,
+    evaluation_episodes: int = 10,
     **kwargs,
   ) -> None:
     self.task_name = task_name
@@ -36,6 +37,10 @@ class DoublePendulumPpoRunner(MjlabOnPolicyRunner):
     self.export_fail_fast = export_fail_fast
     self._last_saved_iteration = -1
     super().__init__(*args, **kwargs)
+    self.checkpoint_monitor = CheckpointMonitor(
+      Path(self.logger.log_dir),
+      episodes=evaluation_episodes,
+    )
 
   def load(
     self,
@@ -87,6 +92,24 @@ class DoublePendulumPpoRunner(MjlabOnPolicyRunner):
       print(f"[WARN] PPO ONNX export failed; previous policy kept: {error}")
       if self.export_fail_fast:
         raise
+    else:
+      try:
+        metrics = self.checkpoint_monitor.evaluate(
+          self.current_learning_iteration,
+          checkpoint,
+        )
+      except Exception as error:  # noqa: BLE001 - monitoring must not stop training.
+        print(f"[WARN] PPO checkpoint evaluation failed: {error}", flush=True)
+      else:
+        if self.logger.writer is not None:
+          for name, value in metrics.items():
+            self.logger.writer.add_scalar(name, value, self.current_learning_iteration)
+        if metrics:
+          success = metrics["eval/hanging/success_rate"]
+          print(
+            f"PPO_CHECKPOINT_EVALUATED success_rate={success:.3f}",
+            flush=True,
+          )
 
   def _export_latest(self, run_dir: Path, checkpoint: Path) -> None:
     module = self.alg.get_policy().as_onnx(verbose=False).cpu().eval()

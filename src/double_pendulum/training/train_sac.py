@@ -12,8 +12,6 @@ from pathlib import Path
 import torch
 import yaml
 
-from mjlab.envs import ManagerBasedRlEnv
-
 from double_pendulum.algorithms.sac import ReplayBuffer, SACAgent, UpdateBudget
 from double_pendulum.algorithms.sac.config import SACTrainConfig
 from double_pendulum.common import DEFAULT_CONTRACT
@@ -24,13 +22,16 @@ from double_pendulum.export.checkpoints import (
 from double_pendulum.export.sac_exporter import export_sac_policy
 from double_pendulum.tasks import get_task, list_tasks
 from double_pendulum.tasks.combined import mdp
+from mjlab.envs import ManagerBasedRlEnv
 
 from .common import (
   MetricsLogger,
+  WandbSession,
   capture_rng_state,
   prepare_run_dir,
   restore_rng_state,
 )
+from .monitoring import CheckpointMonitor
 
 CHECKPOINT_FORMAT = "double_pendulum_sac_v3"
 
@@ -60,6 +61,8 @@ def _save(
   update_budget: UpdateBudget,
   evaluation,
   reward,
+  logger: MetricsLogger,
+  monitor: CheckpointMonitor,
 ) -> Path:
   checkpoint = run_dir / "checkpoints" / f"step_{transitions:012d}.pt"
   state = {
@@ -90,6 +93,18 @@ def _save(
       f"abs_error={parity.max_abs_error:.3e} rel_error={parity.max_rel_error:.3e}",
       flush=True,
     )
+    try:
+      metrics = monitor.evaluate(transitions, checkpoint)
+    except Exception as error:  # noqa: BLE001 - monitoring must not stop training.
+      print(f"CHECKPOINT_EVAL_FAILED checkpoint={checkpoint}: {error}", flush=True)
+    else:
+      if metrics:
+        logger.write(transitions, metrics)
+        success = metrics["eval/hanging/success_rate"]
+        print(
+          f"SAC_CHECKPOINT_EVALUATED success_rate={success:.3f}",
+          flush=True,
+        )
   except Exception as error:
     print(f"ONNX_EXPORT_FAILED checkpoint={checkpoint}: {error}", flush=True)
     if config.export_fail_fast:
@@ -115,10 +130,26 @@ def train(config: SACTrainConfig) -> Path:
   if config.resume is None:
     _dump_config(run_dir / "train_config.yaml", asdict(config))
     _dump_config(run_dir / "task_config.yaml", asdict(task.config))
-  logger = MetricsLogger(run_dir)
-  env = ManagerBasedRlEnv(cfg=task.make_env_cfg(config.num_envs), device=config.device)
-  started = time.monotonic()
+  wandb_session = WandbSession(
+    run_dir,
+    enabled=config.use_wandb,
+    project=config.wandb_project,
+    entity=config.wandb_entity,
+    name=config.wandb_run_name,
+    config={"train": asdict(config), "task": asdict(task.config)},
+  )
+  if wandb_session.url is not None:
+    print(f"WANDB_RUN={wandb_session.url}", flush=True)
+  logger = None
+  env = None
   try:
+    logger = MetricsLogger(run_dir)
+    monitor = CheckpointMonitor(run_dir, episodes=config.evaluation_episodes)
+    env = ManagerBasedRlEnv(
+      cfg=task.make_env_cfg(config.num_envs),
+      device=config.device,
+    )
+    started = time.monotonic()
     observations, _ = env.reset(seed=config.seed)
     actor_obs = _actor_observation(observations)
     action_dim = env.action_manager.total_action_dim
@@ -253,6 +284,8 @@ def train(config: SACTrainConfig) -> Path:
           update_budget=update_budget,
           evaluation=task.evaluation,
           reward=task.config.reward,
+          logger=logger,
+          monitor=monitor,
         )
         last_saved_at = transitions
         while next_checkpoint <= transitions:
@@ -269,10 +302,15 @@ def train(config: SACTrainConfig) -> Path:
         update_budget=update_budget,
         evaluation=task.evaluation,
         reward=task.config.reward,
+        logger=logger,
+        monitor=monitor,
       )
   finally:
-    logger.close()
-    env.close()
+    if logger is not None:
+      logger.close()
+    if env is not None:
+      env.close()
+    wandb_session.finish()
   return run_dir
 
 
@@ -292,6 +330,11 @@ def parse_args(argv: list[str] | None = None) -> SACTrainConfig:
   parser.add_argument("--run-dir")
   parser.add_argument("--resume")
   parser.add_argument("--export-fail-fast", action="store_true")
+  parser.add_argument("--evaluation-episodes", type=int, default=10)
+  parser.add_argument("--wandb", action="store_true", dest="use_wandb")
+  parser.add_argument("--wandb-project", default="double-pendulum")
+  parser.add_argument("--wandb-entity")
+  parser.add_argument("--wandb-run-name")
   return SACTrainConfig(**vars(parser.parse_args(argv)))
 
 
