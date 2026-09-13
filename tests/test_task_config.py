@@ -16,6 +16,7 @@ def test_combined_task_has_one_shared_contract() -> None:
     "link_alignment",
     "upright_capture",
     "quiet_upright",
+    "global_velocity",
     "upright_velocity",
     "torque",
     "action_rate",

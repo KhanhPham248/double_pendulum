@@ -95,9 +95,24 @@ python scripts/train_sac.py \
   --export-fail-fast
 ```
 
-Reward-v2 SAC dùng checkpoint format `double_pendulum_sac_v3`, trong đó có
+Reward-v4 SAC dùng checkpoint format `double_pendulum_sac_v3`, trong đó có
 trạng thái update budget và reward metadata. Không resume checkpoint SAC cũ
-được tạo với reward-v1/format v2; hãy bắt đầu một run mới.
+được tạo với reward-v1/v2/v3; hãy bắt đầu một run mới.
+
+Run kiểm chứng reward-v4 đầu tiên:
+
+```bash
+python scripts/train_sac.py \
+  --task combined \
+  --device cuda:0 \
+  --num-envs 64 \
+  --total-transitions 2000000 \
+  --batch-size 256 \
+  --utd-ratio 0.25 \
+  --seed 1 \
+  --run-dir runs/combined/sac/reward_v4_seed1 \
+  --export-fail-fast
+```
 
 ### PPO với mJLab/RSL-RL
 
@@ -110,12 +125,12 @@ python scripts/train_ppo.py \
   --export-fail-fast
 ```
 
-Task `combined` hiện dùng reward formula v2. Formula này đánh giá hướng tuyệt
-đối của cả hai link bằng `q1` và `q1 + q2`; nó không thưởng riêng cho việc giữ
-khớp khuỷu thẳng như baseline v1. Reward version và toàn bộ weight được lưu
-trong `task_config.yaml` và `policy.yaml` của run mới.
+Task `combined` hiện dùng reward formula v4. Formula này giữ mục tiêu upright
+của v3 (`q1 = pi`, `q2 = 0`) và thêm penalty vận tốc toàn cục để tránh nghiệm
+quay vòng tốc độ cao. Reward version và toàn bộ weight được lưu trong
+`task_config.yaml` và `policy.yaml` của run mới.
 
-### PPO reward-v3 validation run
+### PPO reward-v4 validation run
 
 Để cô lập ảnh hưởng của reward, lần chạy đầu tiên phải giữ nguyên
 hyperparameter PPO và chỉ sử dụng task/reward mới:
@@ -128,18 +143,18 @@ python scripts/train_ppo.py \
   --max-iterations 2000 \
   --save-interval 50 \
   --seed 1 \
-  --run-dir runs/combined/ppo/reward_v3_seed1 \
+  --run-dir runs/combined/ppo/reward_v4_seed1 \
   --export-fail-fast
 ```
 
-Không resume checkpoint reward-v1 cho thí nghiệm này. Policy phải học lại từ
-đầu để kết quả A/B có ý nghĩa.
+Không resume checkpoint reward-v1/v2/v3 cho thí nghiệm này. Policy phải học
+lại từ đầu để kết quả A/B có ý nghĩa.
 
 Sau khi train, kiểm tra từ trạng thái upright trước:
 
 ```bash
 python scripts/evaluate.py \
-  --run runs/combined/ppo/reward_v3_seed1 \
+  --run runs/combined/ppo/reward_v4_seed1 \
   --episodes 100 \
   --duration 60 \
   --reset-mode upright
@@ -149,7 +164,7 @@ Sau đó kiểm tra toàn bộ swing-up từ trạng thái hanging:
 
 ```bash
 python scripts/evaluate.py \
-  --run runs/combined/ppo/reward_v3_seed1 \
+  --run runs/combined/ppo/reward_v4_seed1 \
   --episodes 100 \
   --duration 20 \
   --reset-mode hanging
@@ -161,6 +176,7 @@ Các dấu hiệu reward fix hoạt động đúng:
 - `action_saturation_fraction` giảm rõ rệt so với baseline `96.37%`;
 - `longest_hold_s` vượt 5 giây từ upright;
 - reward `quiet_upright` và `upright_capture` tăng trong TensorBoard;
+- reward `global_velocity` không bị âm lớn kéo dài;
 - reward không còn bị một thành phần giữ khuỷu thẳng chi phối.
 
 Xem toàn bộ tham số được hỗ trợ:

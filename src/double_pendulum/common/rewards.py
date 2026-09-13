@@ -13,10 +13,11 @@ from .observations import wrapped_angle_error
 class CombinedRewardSpec:
   """Reward parameters for the single-policy swing-up and balancing task."""
 
-  formula_version: int = 3
+  formula_version: int = 4
   link_alignment_weight: float = 1.0
   upright_capture_weight: float = 2.0
   balancing_bonus_weight: float = 2.0
+  global_velocity_weight: float = -0.005
   upright_velocity_weight: float = -0.1
   torque_weight: float = -0.01
   action_rate_weight: float = -0.02
@@ -26,7 +27,7 @@ class CombinedRewardSpec:
   capture_elbow_sigma_rad: float = 0.45
 
   def __post_init__(self) -> None:
-    if self.formula_version not in (1, 2, 3):
+    if self.formula_version not in (1, 2, 3, 4):
       raise ValueError("unsupported combined reward formula")
     rewards = (
       self.link_alignment_weight,
@@ -34,6 +35,7 @@ class CombinedRewardSpec:
       self.balancing_bonus_weight,
     )
     penalties = (
+      self.global_velocity_weight,
       self.upright_velocity_weight,
       self.torque_weight,
       self.action_rate_weight,
@@ -137,7 +139,7 @@ def capture_weighted_upright_velocity_l2(
   base_sigma_rad: float,
   elbow_sigma_rad: float,
 ) -> Any:
-  """Penalize world-frame link velocity inside the reward-v3 capture region."""
+  """Penalize world-frame link velocity inside the upright capture region."""
 
   proximity = upright_capture(
     qpos,

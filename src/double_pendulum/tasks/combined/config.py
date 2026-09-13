@@ -138,6 +138,10 @@ def make_env_cfg(
         "velocity_threshold_rad_s": task_cfg.stable_velocity_rad_s,
       },
     ),
+    "global_velocity": RewardTermCfg(
+      func=mdp.global_velocity_l2,
+      weight=task_cfg.reward.global_velocity_weight,
+    ),
     "upright_velocity": RewardTermCfg(
       func=mdp.upright_velocity_l2,
       weight=task_cfg.reward.upright_velocity_weight,

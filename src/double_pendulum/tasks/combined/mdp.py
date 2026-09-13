@@ -10,6 +10,7 @@ import torch
 from double_pendulum.common.observations import policy_observation
 from double_pendulum.common.rewards import (
   absolute_link_alignment,
+  absolute_link_velocity_l2,
   action_l2,
   action_rate_l2 as common_action_rate_l2,
   capture_weighted_upright_velocity_l2,
@@ -143,6 +144,11 @@ def upright_velocity_l2(
     base_sigma_rad=base_sigma_rad,
     elbow_sigma_rad=elbow_sigma_rad,
   )
+
+
+def global_velocity_l2(env: ManagerBasedRlEnv) -> torch.Tensor:
+  _, qvel = state(env)
+  return absolute_link_velocity_l2(qvel, torch)
 
 
 def torque_l2(env: ManagerBasedRlEnv) -> torch.Tensor:

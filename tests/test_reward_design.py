@@ -7,6 +7,7 @@ import numpy as np
 from double_pendulum.common import DEFAULT_COMBINED_REWARD
 from double_pendulum.common.rewards import (
   absolute_link_alignment,
+  absolute_link_velocity_l2,
   action_rate_l2,
   capture_weighted_upright_velocity_l2,
   upright_capture,
@@ -80,6 +81,13 @@ def test_upright_velocity_cost_uses_absolute_link_velocities() -> None:
   assert np.isclose(moving, 0.5)
 
 
+def test_global_velocity_cost_applies_away_from_upright() -> None:
+  stationary = absolute_link_velocity_l2(np.zeros(2), np)
+  spinning = absolute_link_velocity_l2(np.array([6.0, 6.0]), np)
+  assert np.isclose(stationary, 0.0)
+  assert spinning > 0.0
+
+
 def _single_step_return(action: float, qvel: np.ndarray | None = None) -> float:
   accumulator = EpisodeAccumulator(
     control_dt=0.02,
@@ -123,3 +131,25 @@ def test_straight_hanging_state_is_not_rewarded() -> None:
   )
   accumulator.add(np.array([0.0, 0.0]), np.zeros(2), 0.0)
   assert accumulator.episode_return < 0.0
+
+
+def test_fast_hanging_spin_is_penalized_more_than_quiet_hanging() -> None:
+  quiet = EpisodeAccumulator(
+    control_dt=0.02,
+    torque_limit_nm=6.0,
+    required_hold_s=5.0,
+    angle_threshold_rad=0.21,
+    velocity_threshold_rad_s=1.0,
+    reward_spec=DEFAULT_COMBINED_REWARD,
+  )
+  spinning = EpisodeAccumulator(
+    control_dt=0.02,
+    torque_limit_nm=6.0,
+    required_hold_s=5.0,
+    angle_threshold_rad=0.21,
+    velocity_threshold_rad_s=1.0,
+    reward_spec=DEFAULT_COMBINED_REWARD,
+  )
+  quiet.add(np.array([0.0, 0.0]), np.zeros(2), 0.0)
+  spinning.add(np.array([0.0, 0.0]), np.array([6.0, 6.0]), 0.0)
+  assert spinning.episode_return < quiet.episode_return

@@ -11,6 +11,7 @@ from double_pendulum.common import DEFAULT_COMBINED_REWARD, CombinedRewardSpec
 from double_pendulum.common.observations import wrapped_angle_error
 from double_pendulum.common.rewards import (
   absolute_link_alignment,
+  absolute_link_velocity_l2,
   capture_weighted_upright_velocity_l2,
   upright_capture,
   upright_proximity,
@@ -109,11 +110,15 @@ class EpisodeAccumulator:
           elbow_sigma_rad=reward.capture_elbow_sigma_rad,
         )
       )
+    global_velocity_cost = 0.0
+    if reward.formula_version >= 4:
+      global_velocity_cost = float(absolute_link_velocity_l2(qvel, np))
     action_rate = (action - self.previous_action) ** 2
     self.episode_return += (
       reward.link_alignment_weight * alignment
       + reward.upright_capture_weight * capture
       + reward.balancing_bonus_weight * float(stable)
+      + reward.global_velocity_weight * global_velocity_cost
       + reward.upright_velocity_weight * velocity_cost
       + reward.torque_weight * action**2
       + reward.action_rate_weight * action_rate

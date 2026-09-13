@@ -28,7 +28,7 @@ def test_manifest_detects_policy_tampering(tmp_path: Path) -> None:
   )
   loaded = load_manifest(tmp_path / "policy.yaml")
   assert loaded.algorithm == "sac"
-  assert loaded.reward.formula_version == 3
+  assert loaded.reward.formula_version == 4
   policy.write_bytes(b"tampered")
   with pytest.raises(ValueError, match="hash"):
     load_manifest(tmp_path / "policy.yaml")
