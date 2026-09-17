@@ -1,0 +1,17 @@
+registry_version: 1
+purpose: "Two full-task frozen experts for RMA-meta selection"
+
+# These are deliberately existing, independently evaluated bundles.  The
+# loader verifies policy.yaml -> policy.onnx hashes and the common 6D -> 1D
+# torque contract before any meta training starts.
+experts:
+  - name: policy_sac
+    algorithm: sac
+    run_dir: runs/combined/sac/reward_v3_seed1
+    model: policy.onnx
+    policy_sha256: cb1c69504a72e3704786e912a605c90f85d613494acb2dfab8960a325423c36c
+  - name: policy_ppo
+    algorithm: ppo
+    run_dir: runs/combined/ppo/reward_v4_fixed_lr_seed1/best
+    model: policy.onnx
+    policy_sha256: f62197d5157ec62074c23ab5c594349b2b85f84be8aafedf12f4deb8563a0b74

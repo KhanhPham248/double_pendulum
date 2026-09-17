@@ -1,0 +1,53 @@
+config_version: 1
+task_id: combined
+expert_registry: configs/meta_rl/double_pendulum_expert_registry_v1.yaml
+expert_names: [policy_sac, policy_ppo]
+initial_expert: policy_sac
+
+# Factors are privileged and train-only.  They describe dynamics uncertainty,
+# not the swing-up/balance phase, because both selected experts solve the full
+# task end-to-end.
+factor_names:
+  - mass_scale_delta
+  - base_damping_scale_delta
+  - elbow_damping_scale_delta
+  - torque_limit_scale_delta
+  - actuator_delay_steps_norm
+  - observation_noise_std_norm
+
+model:
+  observation_dim: 6
+  factor_dim: 6
+  latent_dim: 4
+  history_steps: 50
+  adaptation_hidden_dim: 64
+  adaptation_num_layers: 1
+  factor_hidden_dims: [32, 16]
+  meta_hidden_dims: [128, 64]
+
+ppo:
+  meta_decimation: 5
+  rollout_steps: 32
+  learning_epochs: 5
+  mini_batches: 4
+  learning_rate: 0.0003
+  finetune_learning_rate: 0.0001
+  clip_param: 0.2
+  value_loss_coef: 1.0
+  entropy_coef: 0.01
+  gamma: 0.99
+  gae_lambda: 0.95
+  max_grad_norm: 1.0
+  target_kl: 0.02
+  switch_penalty: 0.01
+  routing_loss_coef: 0.25
+  max_iterations: 3000
+  finetune_iterations: 1000
+  save_interval: 100
+
+runtime:
+  low_level_hz: 50.0
+  meta_hz: 10.0
+  confidence_threshold: 0.60
+  crossfade_s: 0.20
+  min_dwell_s: 0.20
